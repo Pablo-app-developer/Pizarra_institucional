@@ -5,7 +5,7 @@
   <div><p class="miga"><a href="{% url 'gestion_lista' 'estudiantes' %}">Estudiantes</a> /</p>
   <div class="persona"><span class="avatar">{{ est.iniciales }}</span><div><h1>{{ est.nombre_natural }}</h1>
   <p class="encabezado__sub">{{ est.get_tipo_documento_display }} {{ est.documento }}{% if matricula %}, {{ matricula.grupo.nombre_largo }}{% else %}, sin matrícula este año{% endif %}{% if not est.activo %} <span class="estado estado--mal">Retirado</span>{% endif %}</p></div></div></div>
-  <div class="encabezado__acciones">{% if "pensiones" in capacidades %}<a class="boton boton--secundario" href="{% url 'cuenta_estudiante' est.pk %}">Estado de cuenta</a>{% endif %}{% if matricula and "academico" in capacidades %}<a class="boton boton--secundario" href="{% url 'observador' matricula.pk %}">Observador</a>{% endif %}
+  <div class="encabezado__acciones">{% if "pensiones" in capacidades and "pensiones" in modulos %}<a class="boton boton--secundario" href="{% url 'cuenta_estudiante' est.pk %}">Estado de cuenta</a>{% endif %}{% if matricula and "notas" in capacidades and "observador" in modulos %}<a class="boton boton--secundario" href="{% url 'observador' matricula.pk %}">Observador</a>{% endif %}
   <a class="boton" href="{% url 'gestion_editar' 'estudiantes' est.pk %}">Editar datos y grupo</a></div>
 </div>
 <div class="rejilla rejilla--2">
@@ -13,10 +13,17 @@
     {% if matricula %}<section class="panel"><div class="panel__cabeza"><h2>Notas del año</h2>
       {% if asistencia.total %}<span class="secundario pequeno">Asistencia {{ asistencia.porcentaje }} %</span>{% endif %}</div>
       {% include "base/_resumen_notas.html" %}</section>
-    <section class="panel"><div class="panel__cabeza"><h2>Observador</h2>{% if "academico" in capacidades %}<a href="{% url 'observador' matricula.pk %}">Agregar observación</a>{% endif %}</div>
-      {% include "base/_observaciones.html" %}</section>
+    {% if "observador" in modulos %}<section class="panel"><div class="panel__cabeza"><h2>Observador</h2>{% if "notas" in capacidades %}<a href="{% url 'observador' matricula.pk %}">Agregar observación</a>{% endif %}</div>
+      {% include "base/_observaciones.html" %}</section>{% endif %}
     {% else %}<div class="panel vacio"><p>Este estudiante no está matriculado en el año activo.</p><p><a class="boton" href="{% url 'gestion_editar' 'estudiantes' est.pk %}">Asignar grupo</a></p></div>{% endif %}
   </div>
+  <div class="apilado">
+  <section class="panel"><div class="panel__cabeza"><h2>Cuenta del estudiante</h2></div><div class="panel__cuerpo">
+    {% if est.usuario %}<p>Ingresa con el usuario <strong>{{ est.usuario.username }}</strong> y ve sus propias notas, tareas y horario.</p>
+    <form method="post" action="{% url 'restablecer_clave' est.usuario.pk %}" style="margin-top:8px" data-confirmar="Se generará una contraseña temporal nueva para {{ est.nombres }}.">{% csrf_token %}<input type="hidden" name="volver" value="{{ request.path }}"><button class="enlace-boton" type="submit">Generar contraseña nueva</button></form>
+    {% else %}<p class="secundario">Aún no tiene cuenta propia. Sus acudientes ya pueden consultar todo; cree la cuenta si quiere que el estudiante entre por su lado.</p>
+    <form method="post" action="{% url 'crear_cuenta_estudiante' est.pk %}" style="margin-top:10px">{% csrf_token %}<button class="boton boton--secundario" type="submit">Crear cuenta del estudiante</button></form>{% endif %}
+  </div></section>
   <section class="panel">
     <div class="panel__cabeza"><h2>Acudientes</h2></div>
     <ul class="lista">{% for a in acudiencias %}<li>
@@ -33,6 +40,6 @@
       {% include "base/_form.html" with form=vincular %}
       <button class="boton" type="submit">Agregar acudiente</button>
     </form>
-  </section>
+  </section></div>
 </div>
 {% endblock %}

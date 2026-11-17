@@ -10,11 +10,11 @@
   <a href="{% url 'familia_resumen' est.pk %}"{% if seccion == "resumen" %} aria-current="page"{% endif %}>Resumen</a>
   <a href="{% url 'familia_notas' est.pk %}"{% if seccion == "notas" %} aria-current="page"{% endif %}>Notas</a>
   <a href="{% url 'familia_tareas' est.pk %}"{% if seccion == "tareas" %} aria-current="page"{% endif %}>Tareas</a>
-  <a href="{% url 'familia_horario' est.pk %}"{% if seccion == "horario" %} aria-current="page"{% endif %}>Horario</a>
+  {% if "horarios" in modulos %}<a href="{% url 'familia_horario' est.pk %}"{% if seccion == "horario" %} aria-current="page"{% endif %}>Horario</a>{% endif %}
   <a href="{% url 'familia_asistencia' est.pk %}"{% if seccion == "asistencia" %} aria-current="page"{% endif %}>Asistencia</a>
-  <a href="{% url 'familia_observaciones' est.pk %}"{% if seccion == "observaciones" %} aria-current="page"{% endif %}>Observaciones</a>
+  {% if "observador" in modulos %}<a href="{% url 'familia_observaciones' est.pk %}"{% if seccion == "observaciones" %} aria-current="page"{% endif %}>Observaciones</a>{% endif %}
   <a href="{% url 'familia_boletines' est.pk %}"{% if seccion == "boletines" %} aria-current="page"{% endif %}>Boletines</a>
-  {% if user.rol == "acudiente" %}<a href="{% url 'familia_pagos' est.pk %}"{% if seccion == "pagos" %} aria-current="page"{% endif %}>Pagos</a>{% endif %}
+  {% if user.rol == "acudiente" and "pensiones" in modulos %}<a href="{% url 'familia_pagos' est.pk %}"{% if seccion == "pagos" %} aria-current="page"{% endif %}>Pagos</a>{% endif %}
 </nav>
 {% block familia %}{% endblock %}
 {% endblock %}

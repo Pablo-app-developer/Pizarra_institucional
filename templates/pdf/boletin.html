@@ -43,7 +43,7 @@ h2 { font-size: 8.5pt; margin: 0 0 3pt; color: {{ tono }}; }
 </div>
 {% endif %}
 <div class="bloques"><div><h2>Observaciones del director(a) de grupo</h2><div class="obs">{{ b.comentario }}</div></div></div>
-{% if not b.descriptivo %}<p class="escala">Escala de valoración ({{ colegio.nota_minima }} a {{ colegio.nota_maxima }}): Bajo, menos de {{ colegio.desde_basico }}. Básico, de {{ colegio.desde_basico }} a menos de {{ colegio.desde_alto }}. Alto, de {{ colegio.desde_alto }} a menos de {{ colegio.desde_superior }}. Superior, desde {{ colegio.desde_superior }}.</p>{% endif %}
+{% if not b.descriptivo %}<p class="escala">Escala de valoración ({{ colegio.nota_minima|nota }} a {{ colegio.nota_maxima|nota }}): Bajo, menos de {{ colegio.desde_basico|nota }}. Básico, de {{ colegio.desde_basico|nota }} a menos de {{ colegio.desde_alto|nota }}. Alto, de {{ colegio.desde_alto|nota }} a menos de {{ colegio.desde_superior|nota }}. Superior, desde {{ colegio.desde_superior|nota }}.</p>{% endif %}
 <div class="firmas"><div>{{ colegio.nombre_rector|default:"Rector(a)" }}<br>Rectoría</div><div>{{ b.grupo.director.nombre_completo|default:"Director(a) de grupo" }}<br>Dirección de grupo</div></div>
 </section>{% endfor %}
 </body></html>{% endwith %}

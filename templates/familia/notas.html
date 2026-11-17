@@ -18,5 +18,5 @@
   {% if f.logros %}<p class="pequeno" style="margin-top:6px"><strong>Lo que se trabaja este periodo</strong></p><ul class="logros">{% for l in f.logros %}<li>{{ l }}</li>{% endfor %}</ul>{% endif %}</div>{% endif %}
   </div></details>{% endfor %}
 </section>{% endif %}
-<p class="campo__ayuda" style="margin-top:12px">Escala del colegio: Bajo, menos de {{ colegio.desde_basico }}. Básico, desde {{ colegio.desde_basico }}. Alto, desde {{ colegio.desde_alto }}. Superior, desde {{ colegio.desde_superior }}.</p>
+<p class="campo__ayuda" style="margin-top:12px">Escala del colegio: Bajo, menos de {{ colegio.desde_basico|nota }}. Básico, desde {{ colegio.desde_basico|nota }}. Alto, desde {{ colegio.desde_alto|nota }}. Superior, desde {{ colegio.desde_superior|nota }}.</p>
 {% endblock %}

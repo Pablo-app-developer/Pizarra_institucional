@@ -27,21 +27,55 @@ En Windows, los boletines en PDF necesitan GTK/Pango para WeasyPrint
 docker build -t pizarra . && docker run -p 8000:8000 -e DEBUG=1 pizarra
 ```
 
-## Qué hace cada perfil
+## Perfiles y permisos
 
 | Perfil | Usuario de ejemplo | Acceso |
 |---|---|---|
-| Rectoría | 1001 | Todo, incluida la identidad del colegio (escudo y color), la escala y el equipo directivo |
-| Coordinación | 1002 | Lo académico: docentes, grupos, plan de estudios, horarios, consolidados, boletines, cierre de periodos y de año |
-| Secretaría | 1003 | Estudiantes, acudientes, matrícula, importación, boletines, comunicados y pensiones |
+| Rectoría | 1001 | Todos los permisos |
+| Coordinación | 1002 | Estudiantes, docentes, estructura académica, notas, cierres, boletines y comunicados |
+| Secretaría | 1003 | Estudiantes, boletines, comunicados y pensiones |
+| Administrativo | 1004 | En el ejemplo, solo pensiones y comunicados (permisos a la medida) |
+| Sistemas | 1005 | Estudiantes, docentes, estructura académica, comunicados y configuración, sin notas ni dinero |
 | Docente | 2001 | Notas, recuperaciones, tareas, asistencia, observador, logros de sus asignaturas y su horario |
-| Docente de preescolar | 2007 | Lo mismo, con valoración descriptiva por dimensiones en lugar de notas |
-| Acudiente | 3001 | Notas, tareas (y su envío), horario, asistencia, observaciones, boletines, pagos y avisos de sus hijos |
-| Estudiante | (opcional) | Lo mismo que el acudiente, sin el estado de cuenta |
-| Administrador de la plataforma | superusuario | `/superadmin/`: crea colegios y sus primeras cuentas |
+| Docente de preescolar | 2007 | Lo mismo, con valoración descriptiva por dimensiones |
+| Acudiente | 3001 | Notas, tareas, horario, asistencia, observaciones, boletines, pagos y avisos de sus hijos |
+| Estudiante | se crea desde su ficha | Lo mismo que el acudiente, sin el estado de cuenta |
+| Administrador de la plataforma | superusuario | `/superadmin/`: crea colegios y activa sus módulos |
+
+El cargo solo propone permisos. Quien tenga el permiso **Configuración y permisos** marca o quita, persona por
+persona, cualquiera de estos nueve: estudiantes y acudientes, docentes, estructura académica, notas y observador,
+cierres, boletines, comunicados, pensiones, y configuración y permisos. El sistema no deja al colegio sin al menos
+una cuenta activa que pueda administrar permisos. Los cambios de permisos quedan en la bitácora.
+
+## Sistema de evaluación
+
+Cada colegio elige su escala en Configuración: 1 a 5 (por defecto), 0 a 5, 1 a 10, 0 a 10, 0 a 100 o una
+personalizada, con o sin decimales. Los cuatro niveles son siempre los de la escala nacional del Decreto 1290 de 2009
+(Superior, Alto, Básico y Bajo); lo que cambia es el rango numérico y dónde empieza cada nivel. Si ya hay notas, al
+cambiar la escala se convierten conservando el nivel de cada estudiante, y el cambio queda en la bitácora.
+
+## Carga de notas para docentes
+
+- La columna de una actividad nueva se agrega desde la misma planilla, escribiendo solo su nombre.
+- Enter baja al siguiente estudiante; las flechas mueven entre casillas. En escalas con decimal, «45» se entiende 4,5.
+- Se puede copiar una columna o un bloque en Excel y pegarlo en la planilla.
+- La planilla se descarga en Excel, se llena (incluso con actividades nuevas) y se vuelve a subir. Si algo está mal,
+  no se guarda nada y se indica la fila.
+- En el celular se califica una actividad a la vez, con la opción de llenar las vacías con una misma nota.
+- Cada casilla toma el color de su desempeño y la definitiva se recalcula mientras se escribe.
+- Lo escrito y no guardado queda como borrador en el equipo y se puede recuperar si se cae el internet.
 
 ## Módulos
 
+Lo básico está siempre: estudiantes, acudientes, docentes, grupos, notas, asistencia, tareas, boletines e identidad.
+Estos ocho son opcionales y el administrador de la plataforma los activa por colegio según lo contratado: plan de
+estudios y malla, horarios, recuperaciones, observador, entrega de tareas en línea, comunicados, avisos y pensiones.
+Lo que no esté activo desaparece del menú y de las pantallas de todos los perfiles.
+
+- **Puesta en marcha:** el panel muestra qué falta y ofrece crear la estructura típica (año, cuatro periodos, grados
+  de Prejardín a Once, asignaturas de las nueve áreas obligatorias de la Ley 115 de 1994, plan sugerido y jornada).
+- **Exportaciones a Excel:** estudiantes con acudientes, consolidado de notas por grupo y cartera.
+- **Bitácora:** permisos, cierres, cambios de escala, contraseñas restablecidas, pagos anulados y eliminaciones.
 - **Identidad:** escudo y color institucional en el menú, la pantalla de ingreso, los boletines y los recibos.
 - **Plan de estudios y malla:** asignaturas e intensidad por grado, logros por periodo, malla imprimible. Los logros salen en el boletín.
 - **Horarios:** jornada con bloques y descansos, generación automática sin cruces de docentes y edición por grupo con validación.
@@ -95,8 +129,8 @@ o un almacenamiento externo. El escudo no tiene ese problema porque se guarda en
 python manage.py test
 ```
 
-79 pruebas: cálculo de notas y recuperaciones, permisos por perfil y por colegio, planilla, importación, horarios sin cruces,
-cierre de año, avisos, envío de tareas, pensiones, preescolar, escudo y apertura de todas las pantallas.
+109 pruebas, entre ellas un recorrido completo de un colegio desde cero hasta el boletín, permisos por persona,
+conversión de escalas, módulos apagados, carga de notas por Excel, horarios sin cruces, cierre de año y pensiones.
 
 ## Lo que todavía no incluye
 

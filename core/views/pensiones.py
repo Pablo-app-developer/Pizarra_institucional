@@ -8,9 +8,10 @@ from django.utils import timezone
 from django.views.decorators.http import require_POST
 
 from ..avisos import avisar_estudiantes
+from ..bitacora import registrar
 from ..forms import CobroForm, GenerarCobrosForm, PagoForm
 from ..models import Cobro, Estudiante, Grupo, Matricula, Pago
-from ..permisos import capacidad, estudiante_para, familia
+from ..permisos import capacidad, estudiante_para, familia, modulo
 
 
 def pesos(valor):
@@ -59,6 +60,7 @@ def cartera_del_anio(anio, grupo=None):
 
 
 @capacidad("pensiones")
+@modulo("pensiones")
 def cartera(request):
     colegio = request.user.colegio
     anio = colegio.anio_activo
@@ -79,7 +81,22 @@ def cartera(request):
 
 
 @capacidad("pensiones")
+@modulo("pensiones")
+def exportar_cartera(request):
+    from .directivo import libro_excel
+
+    anio = request.user.colegio.anio_activo
+    filas = [
+        [str(f["matricula"].estudiante), f["matricula"].estudiante.documento, str(f["matricula"].grupo),
+         float(f["cobrado"]), float(f["pagado"]), float(f["saldo"]), float(max(f["vencido"], 0))]
+        for f in (cartera_del_anio(anio) if anio else [])
+    ]
+    return libro_excel("cartera", "Cartera", ["Estudiante", "Documento", "Grupo", "Cobrado", "Pagado", "Saldo", "Vencido"], filas)
+
+
+@capacidad("pensiones")
 @require_POST
+@modulo("pensiones")
 def generar_cobros(request):
     anio = request.user.colegio.anio_activo
     form = GenerarCobrosForm(request.POST)
@@ -108,6 +125,7 @@ def generar_cobros(request):
 
 @capacidad("pensiones")
 @require_POST
+@modulo("pensiones")
 def recordar_mora(request):
     anio = request.user.colegio.anio_activo
     items = [
@@ -122,6 +140,7 @@ def recordar_mora(request):
 
 
 @capacidad("pensiones")
+@modulo("pensiones")
 def cuenta_estudiante(request, pk):
     colegio = request.user.colegio
     est = get_object_or_404(Estudiante, pk=pk, colegio=colegio)
@@ -143,6 +162,7 @@ def cuenta_estudiante(request, pk):
 
 
 @capacidad("pensiones")
+@modulo("pensiones")
 def registrar_pago(request, pk):
     cobro = get_object_or_404(Cobro.objects.select_related("estudiante"), pk=pk, estudiante__colegio=request.user.colegio)
     saldo = cobro.valor - (cobro.pagos.aggregate(t=Sum("valor"))["t"] or 0)
@@ -166,9 +186,11 @@ def registrar_pago(request, pk):
 
 @capacidad("pensiones")
 @require_POST
+@modulo("pensiones")
 def anular_pago(request, pk):
     pago = get_object_or_404(Pago, pk=pk, cobro__estudiante__colegio=request.user.colegio)
     est_id = pago.cobro.estudiante_id
+    registrar(request, "Anuló un pago", f"{pesos(pago.valor)} de «{pago.cobro.concepto}», {pago.cobro.estudiante}")
     pago.delete()
     messages.success(request, "Pago anulado. El saldo del cobro volvió a quedar pendiente.")
     return redirect("cuenta_estudiante", est_id)
@@ -176,12 +198,14 @@ def anular_pago(request, pk):
 
 @capacidad("pensiones")
 @require_POST
+@modulo("pensiones")
 def eliminar_cobro(request, pk):
     cobro = get_object_or_404(Cobro, pk=pk, estudiante__colegio=request.user.colegio)
     est_id = cobro.estudiante_id
     if cobro.pagos.exists():
         messages.error(request, "Este cobro tiene pagos registrados. Anule primero los pagos.")
     else:
+        registrar(request, "Eliminó un cobro", f"«{cobro.concepto}» por {pesos(cobro.valor)}, {cobro.estudiante}")
         cobro.delete()
         messages.success(request, "Cobro eliminado.")
     return redirect("cuenta_estudiante", est_id)
@@ -211,6 +235,7 @@ def recibo(request, pk):
 
 
 @familia
+@modulo("pensiones")
 def familia_pagos(request, pk):
     from django.core.exceptions import PermissionDenied
 

@@ -9,12 +9,12 @@
 <section class="panel">
   <div class="panel__cabeza">
     <div><h2>{{ g.grupo.nombre_largo }}</h2><p class="pequeno secundario">{{ g.n }} estudiante{{ g.n|pluralize }}. Dirige {{ g.grupo.director.nombre_completo|default:"(sin asignar)" }}</p></div>
-    <div class="acciones-fila"><a href="{% url 'horario_grupo' g.grupo.pk %}">Horario</a><a href="{% url 'direccion_grupo' g.grupo.pk %}">Observaciones de boletín</a><a href="{% url 'gestion_editar' 'grupos' g.grupo.pk %}">Editar grupo</a></div>
+    <div class="acciones-fila"><a href="{% url 'horario_grupo' g.grupo.pk %}">Horario</a>{% if "notas" in capacidades %}<a href="{% url 'direccion_grupo' g.grupo.pk %}">Observaciones de boletín</a>{% endif %}<a href="{% url 'gestion_editar' 'grupos' g.grupo.pk %}">Editar grupo</a></div>
   </div>
   <div class="tabla-envoltura">{% if g.clases %}<table>
     <thead><tr><th>Asignatura</th><th>Docente</th><th class="num">Horas semanales</th><th></th></tr></thead>
     <tbody>{% for c in g.clases %}<tr><th scope="row">{{ c.asignatura }}</th><td>{% if c.docente %}{{ c.docente.nombre_completo }}{% else %}<span class="estado estado--aviso">Sin docente</span>{% endif %}</td><td class="num">{{ c.horas_semanales }}</td>
-    <td><div class="acciones-fila"><a href="{% url 'clase_notas' c.pk %}">Planilla</a><a href="{% url 'gestion_editar' 'clases' c.pk %}">Editar</a></div></td></tr>{% endfor %}</tbody>
+    <td><div class="acciones-fila">{% if "notas" in capacidades %}<a href="{% url 'clase_notas' c.pk %}">Planilla</a>{% endif %}<a href="{% url 'gestion_editar' 'clases' c.pk %}">Editar</a></div></td></tr>{% endfor %}</tbody>
   </table>{% else %}<div class="vacio"><p>Este grupo aún no tiene clases.</p><form method="post" action="{% url 'plan_aplicar' g.grupo.grado_id %}" style="margin-top:10px">{% csrf_token %}<button class="boton" type="submit">Crear las clases del plan de estudios</button> <a href="{% url 'gestion_nuevo' 'clases' %}" style="margin-left:10px">o asignar una a mano</a></form></div>{% endif %}</div>
 </section>
 {% empty %}<div class="panel vacio"><p>Cree el primer grupo del año para empezar a matricular.</p></div>{% endfor %}

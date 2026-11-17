@@ -2,6 +2,9 @@
 {% block titulo %}Mis clases{% endblock %}
 {% block contenido %}
 <div class="encabezado"><div><h1>Mis clases</h1><p class="encabezado__sub">{{ hoy|date:"l j \d\e F"|lower|capfirst }}</p></div></div>
+{% if hoy_clases %}<section class="panel" style="margin-bottom:20px"><div class="panel__cabeza"><h2>Sus clases de hoy</h2><a href="{% url 'mi_horario' %}">Ver la semana</a></div>
+<ul class="lista">{% for h in hoy_clases %}<li><div class="lista__fila"><span><strong>{{ h.bloque.inicio|time:"g:i a" }}</strong>&nbsp; {{ h.clase.asignatura }}, {{ h.grupo.nombre_largo }}</span>
+<a href="{% url 'clase_asistencia' h.clase_id %}">Tomar asistencia</a></div></li>{% endfor %}</ul></section>{% endif %}
 {% if clases %}<div class="clases">{% for c in clases %}
   <article class="clase">
     <h3>{{ c.asignatura }}</h3>
@@ -9,7 +12,7 @@
     <p class="pequeno">{% if c.asistencia_hoy %}<span class="estado estado--bien">Asistencia de hoy tomada</span>{% else %}<span class="estado">Asistencia de hoy sin tomar</span>{% endif %}
     {% if c.tareas_abiertas %} <span class="estado estado--info">{{ c.tareas_abiertas }} tarea{{ c.tareas_abiertas|pluralize }} en curso</span>{% endif %}</p>
     <div class="clase__enlaces">
-      <a class="boton boton--chico" href="{% url 'clase_notas' c.pk %}">{% if c.grupo.grado.descriptivo %}Valoraciones{% else %}Notas{% endif %}</a>
+      <a class="boton boton--chico" href="{% url 'clase_notas' c.pk %}">{% if c.grupo.grado.descriptivo %}Escribir valoraciones{% else %}Subir notas{% endif %}</a>
       <a class="boton boton--secundario boton--chico" href="{% url 'clase_asistencia' c.pk %}">Asistencia</a>
       <a class="boton boton--secundario boton--chico" href="{% url 'clase_tareas' c.pk %}">Tareas</a>
     </div>

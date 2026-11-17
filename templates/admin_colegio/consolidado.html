@@ -2,9 +2,10 @@
 {% block titulo %}Consolidado de notas{% endblock %}
 {% block contenido %}
 <div class="encabezado"><div><h1>Consolidado de notas</h1><p class="encabezado__sub">Definitiva de cada asignatura por estudiante, con promedio y puesto.</p></div>
-<div class="encabezado__acciones"><button class="boton boton--secundario" type="button" onclick="window.print()">Imprimir</button></div></div>
+<div class="encabezado__acciones">{% if grupo and periodo %}<a class="boton boton--secundario" href="{% url 'exportar_consolidado' %}?grupo={{ grupo.pk }}&periodo={{ periodo.pk }}">Descargar en Excel</a>{% endif %}<button class="boton boton--secundario" type="button" onclick="window.print()">Imprimir</button></div></div>
 {% if not grupo or not periodo %}<div class="panel vacio"><p>Primero cree grupos y periodos en el año activo.</p></div>{% else %}
 {% include "admin_colegio/_filtro_grupo.html" %}
+{% if grupo.grado.descriptivo %}<p class="aviso aviso--info">{{ grupo.grado.nombre }} se valora de forma descriptiva: no tiene notas numéricas ni puestos. Las valoraciones se ven en el boletín de cada estudiante.</p>{% endif %}
 <div class="tabla-envoltura"><table>
   <thead><tr><th>Estudiante</th>{% for c in clases %}<th class="centro" title="{{ c.asignatura }}">{{ c.asignatura.nombre|truncatechars:12 }}</th>{% endfor %}<th class="centro">Promedio</th><th class="centro">Puesto</th><th class="centro">Pierde</th></tr></thead>
   <tbody>{% for f in filas %}<tr class="fila-enlace"><th scope="row"><a href="{% url 'ficha_estudiante' f.matricula.estudiante.pk %}">{{ f.matricula.estudiante }}</a></th>

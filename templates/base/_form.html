@@ -1,12 +1,18 @@
 {% load pizarra %}
-{% if form.non_field_errors %}<div class="mensaje mensaje--error" role="alert">{{ form.non_field_errors|join:" " }}</div>{% endif %}
-{% for campo in form %}
+{% if not sin_errores and form.non_field_errors %}<div class="mensaje mensaje--error" role="alert">{{ form.non_field_errors|join:" " }}</div>{% endif %}
+{% for campo in campos|default:form %}
   {% if campo|es_casilla %}
   <div class="campo campo--casilla">
     <label>{{ campo }} {{ campo.label }}</label>
     {% if campo.help_text %}<p class="campo__ayuda">{{ campo.help_text }}</p>{% endif %}
     {{ campo.errors }}
   </div>
+  {% elif campo|es_lista_casillas %}
+  <fieldset class="campo casillas"><legend class="etiqueta">{{ campo.label }}</legend>
+    {% if campo.help_text %}<p class="campo__ayuda" style="margin:0 0 8px">{{ campo.help_text }}</p>{% endif %}
+    {% for opcion in campo %}<label class="casillas__opcion">{{ opcion.tag }}<span><strong>{{ opcion.choice_label }}</strong>{% with d=form.descripciones|clave:opcion.data.value %}{% if d %}<br><span class="campo__ayuda">{{ d }}</span>{% endif %}{% endwith %}</span></label>{% endfor %}
+    {{ campo.errors }}
+  </fieldset>
   {% else %}
   <div class="campo">
     <label for="{{ campo.id_for_label }}">{{ campo.label }}{% if not campo.field.required %} <span class="secundario" style="font-weight:400">(opcional)</span>{% endif %}</label>

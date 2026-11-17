@@ -14,10 +14,13 @@ from django.views.decorators.http import require_POST
 
 from .. import calculos, forms
 from ..importar import importar_estudiantes, plantilla_xlsx
+from .. import escala as escala_mod
 from ..avisos import avisar_comunicado
+from ..bitacora import registrar
+from ..models import MODULOS
 from ..models import (
-    Acudiencia, AnioLectivo, Asignatura, Asistencia, Bloque, Clase, Cobro, Comunicado, Estudiante, Grado,
-    Grupo, Matricula, Nota, Pago, Periodo, Tarea, Usuario,
+    Acudiencia, AnioLectivo, Asignatura, Asistencia, Bitacora, Bloque, Clase, Cobro, Comunicado, Estudiante,
+    Grado, Grupo, HorarioClase, Matricula, Nota, Pago, Periodo, PlanEstudio, Tarea, Usuario,
 )
 from ..permisos import capacidad, directivo
 from .comunes import periodo_vigente
@@ -47,7 +50,7 @@ ENTIDADES = {
         vacio="Aún no hay estudiantes. Créelos uno a uno o impórtelos desde Excel.",
     ),
     "docentes": dict(
-        capacidad="academico",
+        capacidad="docentes",
         modelo=Usuario, form=forms.DocenteForm, singular="docente", plural="Docentes",
         nuevo="Nuevo docente",
         qs=lambda c: Usuario.objects.filter(colegio=c, rol="docente").annotate(n=Count("clases")).order_by("last_name", "first_name"),
@@ -181,8 +184,11 @@ def _entidad(nombre, usuario):
         conf = ENTIDADES[nombre]
     except KeyError:
         raise Http404
+    requerido = {"bloques": "horarios", "comunicados": "comunicados"}.get(nombre)
+    if requerido and not usuario.colegio.tiene(requerido):
+        raise Http404("Este módulo no está activo para su colegio.")
     if not usuario.puede(conf["capacidad"]):
-        raise PermissionDenied("Su cargo no tiene acceso a esta sección.")
+        raise PermissionDenied("Su cuenta no tiene permiso para esta sección. Pídalo a rectoría o a sistemas.")
     return conf
 
 
@@ -228,6 +234,10 @@ def gestion_form(request, entidad, pk=None):
         guardado.save()
         if nuevo_comunicado:
             avisar_comunicado(guardado)
+        if entidad == "directivos":
+            nombres = dict((c, n) for c, n, _ in Usuario.PERMISOS)
+            registrar(request, "Permisos de directivo", f"{guardado.nombre_completo} ({guardado.get_cargo_display()}): "
+                      + (", ".join(nombres[p] for p in guardado.permisos) or "sin permisos"))
         if entidad == "estudiantes":
             forms.matricular(guardado, form.cleaned_data.get("grupo"))
         clave = getattr(form, "clave_generada", None)
@@ -243,6 +253,7 @@ def gestion_form(request, entidad, pk=None):
     return render(request, "admin_colegio/form.html", {
         "conf": conf, "entidad": entidad, "form": form, "obj": obj,
         "titulo": f"Editar {conf['singular']}" if obj else conf["nuevo"],
+        "permisos_por_cargo": Usuario.PERMISOS_POR_CARGO,
         "cancelar": reverse(conf["volver"]) if conf.get("volver") else reverse("gestion_lista", args=[entidad]),
     })
 
@@ -258,6 +269,7 @@ def gestion_eliminar(request, entidad, pk):
     nombre = str(obj)
     try:
         obj.delete()
+        registrar(request, f"Eliminó {conf['singular']}", nombre)
         messages.success(request, f"Se eliminó {conf['singular']}: {nombre}.")
     except ProtectedError:
         messages.error(
@@ -274,13 +286,14 @@ def gestion_eliminar(request, entidad, pk):
 @require_POST
 def restablecer_clave(request, pk):
     usuario = get_object_or_404(Usuario, pk=pk, colegio=request.user.colegio)
-    necesaria = {"directivo": "configuracion", "docente": "academico"}.get(usuario.rol, "estudiantes")
+    necesaria = {"directivo": "configuracion", "docente": "docentes"}.get(usuario.rol, "estudiantes")
     if not request.user.puede(necesaria):
         raise PermissionDenied("Su cargo no puede restablecer la contraseña de esta cuenta.")
     clave = forms.clave_temporal()
     usuario.set_password(clave)
     usuario.debe_cambiar_clave = True
     usuario.save()
+    registrar(request, "Restableció contraseña", f"{usuario.nombre_completo} ({usuario.get_rol_display()})")
     messages.success(
         request,
         f"Nueva contraseña temporal de {usuario.nombre_completo} (usuario {usuario.username}): {clave}. "
@@ -303,7 +316,8 @@ def panel(request):
     colegio = u.colegio
     anio = colegio.anio_activo
     hoy = timezone.localdate()
-    contexto = {"anio": anio, "hoy": hoy}
+    contexto = {"anio": anio, "hoy": hoy, "pasos": primeros_pasos(colegio, anio, u)}
+    contexto["pasos_pendientes"] = sum(1 for p in contexto["pasos"] if not p["hecho"] and not p["opcional"])
     if not anio:
         return render(request, "admin_colegio/panel.html", contexto)
 
@@ -316,7 +330,7 @@ def panel(request):
 
     # Todas las notas del periodo en dos consultas, sin importar el tamaño del colegio.
     en_riesgo = {}
-    if periodo and u.puede("academico"):
+    if periodo and u.puede("notas"):
         datos, _ = calculos.consolidar(matriculas, [periodo], colegio)
         for m in matriculas:
             if calculos.perdidas(datos[m.id], colegio, periodo) >= 2:
@@ -331,7 +345,7 @@ def panel(request):
 
     # Clases sin ninguna nota en el periodo vigente: lo que coordinación debe perseguir.
     sin_notas = []
-    if periodo and not periodo.cerrado and u.puede("academico"):
+    if periodo and not periodo.cerrado and u.puede("notas"):
         con_notas = set(
             Nota.objects.filter(actividad__periodo=periodo).values_list("actividad__clase_id", flat=True)
         )
@@ -341,7 +355,7 @@ def panel(request):
         )
 
     cartera = None
-    if u.puede("pensiones"):
+    if u.puede("pensiones") and colegio.tiene("pensiones"):
         vencidos = Cobro.objects.filter(anio=anio, vence__lt=hoy)
         cobrado = vencidos.aggregate(t=Sum("valor"))["t"] or 0
         pagado = Pago.objects.filter(cobro__in=vencidos).aggregate(t=Sum("valor"))["t"] or 0
@@ -442,7 +456,7 @@ def desvincular_acudiente(request, pk):
     return redirect("ficha_estudiante", est_id)
 
 
-@capacidad("configuracion", "academico")
+@capacidad("configuracion", "academico", "cierres")
 def configuracion(request):
     colegio = request.user.colegio
     form = None
@@ -450,7 +464,18 @@ def configuracion(request):
         form = forms.ColegioForm(request.POST or None, request.FILES or None, instance=colegio)
         if request.method == "POST" and form.is_valid():
             form.save()
-            messages.success(request, "Se guardaron los datos del colegio.")
+            if form.cambio_escala:
+                c = form.instance
+                registrar(request, "Cambió el sistema de evaluación",
+                          f"De {form.cortes_previos[0]}–{form.cortes_previos[4]} a {c.nota_minima}–{c.nota_maxima}; "
+                          f"aprueba desde {c.desde_basico}. Notas convertidas: {form.notas_convertidas}.")
+                messages.success(
+                    request,
+                    "Sistema de evaluación actualizado."
+                    + (f" Se convirtieron {form.notas_convertidas} notas a la nueva escala." if form.notas_convertidas else ""),
+                )
+            else:
+                messages.success(request, "Se guardaron los datos del colegio.")
             return redirect("configuracion")
     return render(request, "admin_colegio/configuracion.html", {
         "form": form,
@@ -459,15 +484,18 @@ def configuracion(request):
         "grados": Grado.objects.filter(colegio=colegio),
         "asignaturas": Asignatura.objects.filter(colegio=colegio),
         "directivos": Usuario.objects.filter(colegio=colegio, rol="directivo").count(),
+        "lista_modulos": MODULOS,
+        "escalas": {k: {"valores": list(v[1:6]), "decimales": v[6]} for k, v in escala_mod.PREDEFINIDAS.items()},
     })
 
 
-@capacidad("academico")
+@capacidad("cierres")
 @require_POST
 def alternar_periodo(request, pk):
     periodo = get_object_or_404(Periodo, pk=pk, anio__colegio=request.user.colegio)
     periodo.cerrado = not periodo.cerrado
     periodo.save(update_fields=["cerrado"])
+    registrar(request, "Cerró periodo" if periodo.cerrado else "Reabrió periodo", f"{periodo.nombre} de {periodo.anio.nombre}")
     if periodo.cerrado:
         messages.success(
             request, f"{periodo.nombre} cerrado. Las familias ya pueden descargar el boletín y las notas no se pueden cambiar."
@@ -488,6 +516,8 @@ def importar(request):
     resultado = None
     if request.method == "POST" and form.is_valid():
         resultado = importar_estudiantes(form.cleaned_data["archivo"], request.user.colegio)
+        registrar(request, "Importó estudiantes", f"{resultado['creados']} nuevos, {resultado['actualizados']} actualizados, "
+                  f"{len(resultado['errores'])} filas con error")
     return render(request, "admin_colegio/importar.html", {"form": form, "resultado": resultado})
 
 
@@ -518,7 +548,7 @@ def _seleccion(request):
     return anio, grupos_qs, periodos, grupo, periodo
 
 
-@capacidad("academico")
+@capacidad("notas")
 def consolidado(request):
     anio, grupos_qs, periodos, grupo, periodo = _seleccion(request)
     filas, clases = [], []
@@ -551,3 +581,229 @@ def boletines(request):
         "grupos": grupos_qs, "periodos": periodos, "grupo": grupo, "periodo": periodo,
         "matriculas": matriculas,
     })
+
+
+# --------------------------------------------------------------------------
+# Puesta en marcha
+# --------------------------------------------------------------------------
+
+
+def primeros_pasos(colegio, anio, usuario):
+    """Lista de lo que un colegio nuevo debe dejar listo, con lo que ya está hecho."""
+    def paso(texto, hecho, url, permiso, opcional=False):
+        return {"texto": texto, "hecho": bool(hecho), "url": url, "puede": usuario.puede(permiso), "opcional": opcional}
+
+    hay_grupos = anio and Grupo.objects.filter(anio=anio).exists()
+    return [
+        paso("Crear el año lectivo y activarlo", anio, reverse("gestion_lista", args=["anios"]), "academico"),
+        paso("Definir los periodos y su peso", anio and anio.periodos.exists(), reverse("gestion_lista", args=["periodos"]), "academico"),
+        paso("Registrar los grados", Grado.objects.filter(colegio=colegio).exists(), reverse("gestion_lista", args=["grados"]), "academico"),
+        paso("Registrar las asignaturas", Asignatura.objects.filter(colegio=colegio).exists(), reverse("gestion_lista", args=["asignaturas"]), "academico"),
+        paso("Armar el plan de estudios de cada grado", PlanEstudio.objects.filter(grado__colegio=colegio).exists(), reverse("plan"), "academico"),
+        paso("Registrar los docentes", Usuario.objects.filter(colegio=colegio, rol="docente").exists(), reverse("gestion_lista", args=["docentes"]), "docentes"),
+        paso("Crear los grupos y asignar docentes a sus clases", hay_grupos and Clase.objects.filter(grupo__anio=anio, docente__isnull=False).exists(), reverse("grupos"), "academico"),
+        paso("Matricular a los estudiantes (uno a uno o desde Excel)", anio and Matricula.objects.filter(grupo__anio=anio, activa=True).exists(), reverse("importar"), "estudiantes"),
+        paso("Subir el escudo y elegir el sistema de evaluación", colegio.escudo_tipo, reverse("configuracion"), "configuracion", opcional=True),
+        paso("Definir la jornada y generar los horarios", anio and HorarioClase.objects.filter(grupo__anio=anio).exists(), reverse("horarios"), "academico", opcional=True),
+    ]
+
+
+ESTRUCTURA_GRADOS = [
+    ("Prejardín", "PJ", 1, True), ("Jardín", "JA", 2, True), ("Transición", "TR", 3, True),
+    ("Primero", "1°", 11, False), ("Segundo", "2°", 12, False), ("Tercero", "3°", 13, False),
+    ("Cuarto", "4°", 14, False), ("Quinto", "5°", 15, False), ("Sexto", "6°", 16, False),
+    ("Séptimo", "7°", 17, False), ("Octavo", "8°", 18, False), ("Noveno", "9°", 19, False),
+    ("Décimo", "10°", 20, False), ("Once", "11°", 21, False),
+]
+# Asignaturas de partida, agrupadas en las nueve áreas obligatorias y fundamentales (Ley 115 de 1994, art. 23).
+# (asignatura, área, horas semanales sugeridas)
+ESTRUCTURA_ASIGNATURAS = [
+    ("Matemáticas", "Matemáticas", 5),
+    ("Lengua castellana", "Humanidades, lengua castellana e idiomas extranjeros", 5),
+    ("Inglés", "Humanidades, lengua castellana e idiomas extranjeros", 3),
+    ("Ciencias naturales", "Ciencias naturales y educación ambiental", 4),
+    ("Ciencias sociales", "Ciencias sociales, historia, geografía, constitución política y democracia", 4),
+    ("Tecnología e informática", "Tecnología e informática", 2),
+    ("Educación artística", "Educación artística y cultural", 2),
+    ("Educación física", "Educación física, recreación y deportes", 2),
+    ("Ética y valores", "Educación ética y en valores humanos", 1),
+    ("Educación religiosa", "Educación religiosa", 1),
+]
+# En educación media se suman estas dos (Ley 115 de 1994, art. 31).
+ESTRUCTURA_MEDIA = [("Filosofía", "Filosofía", 2), ("Ciencias económicas y políticas", "Ciencias económicas y políticas", 1)]
+ESTRUCTURA_DIMENSIONES = ["Dimensión cognitiva", "Dimensión comunicativa", "Dimensión corporal",
+                          "Dimensión socioafectiva", "Dimensión estética", "Dimensión ética"]
+ESTRUCTURA_JORNADA = [("1ª hora", "07:00", "07:55", False), ("2ª hora", "07:55", "08:50", False),
+                      ("3ª hora", "08:50", "09:45", False), ("Descanso", "09:45", "10:15", True),
+                      ("4ª hora", "10:15", "11:10", False), ("5ª hora", "11:10", "12:05", False),
+                      ("6ª hora", "12:05", "13:00", False)]
+
+
+@transaction.atomic
+def crear_estructura_tipica(colegio, hoy):
+    """Deja un punto de partida editable. Solo crea lo que el colegio todavía no tiene."""
+    from datetime import date
+
+    creado = []
+    anio = colegio.anio_activo
+    if anio is None:
+        anio = AnioLectivo.objects.create(colegio=colegio, nombre=str(hoy.year), activo=True)
+        creado.append(f"año {anio.nombre}")
+    if not anio.periodos.exists() and anio.nombre.isdigit():
+        a = int(anio.nombre)
+        fechas = [(date(a, 2, 1), date(a, 4, 10)), (date(a, 4, 11), date(a, 6, 20)),
+                  (date(a, 7, 10), date(a, 9, 15)), (date(a, 9, 16), date(a, 11, 30))]
+        nombres = ["Primer periodo", "Segundo periodo", "Tercer periodo", "Cuarto periodo"]
+        Periodo.objects.bulk_create([
+            Periodo(anio=anio, numero=i + 1, nombre=nombres[i], fecha_inicio=ini, fecha_fin=fin, peso=25)
+            for i, (ini, fin) in enumerate(fechas)
+        ])
+        creado.append("4 periodos de 25 %")
+    if not Grado.objects.filter(colegio=colegio).exists():
+        Grado.objects.bulk_create([
+            Grado(colegio=colegio, nombre=n, abreviatura=ab, orden=o, descriptivo=d) for n, ab, o, d in ESTRUCTURA_GRADOS
+        ])
+        creado.append("14 grados, de Prejardín a Once")
+    if not Asignatura.objects.filter(colegio=colegio).exists():
+        Asignatura.objects.bulk_create(
+            [Asignatura(colegio=colegio, nombre=n, area=ar) for n, ar, _ in ESTRUCTURA_ASIGNATURAS + ESTRUCTURA_MEDIA]
+            + [Asignatura(colegio=colegio, nombre=n, area="Preescolar") for n in ESTRUCTURA_DIMENSIONES]
+        )
+        creado.append("asignaturas de las áreas obligatorias y dimensiones de preescolar")
+    if not PlanEstudio.objects.filter(grado__colegio=colegio).exists():
+        por_nombre = {a.nombre: a for a in Asignatura.objects.filter(colegio=colegio)}
+        plan = []
+        for g in Grado.objects.filter(colegio=colegio):
+            if g.descriptivo:
+                items = [(n, 4) for n in ESTRUCTURA_DIMENSIONES]
+            else:
+                items = [(n, h) for n, _, h in ESTRUCTURA_ASIGNATURAS]
+                if g.orden >= 20:
+                    items += [(n, h) for n, _, h in ESTRUCTURA_MEDIA]
+            plan += [PlanEstudio(grado=g, asignatura=por_nombre[n], horas_semanales=h) for n, h in items if n in por_nombre]
+        PlanEstudio.objects.bulk_create(plan)
+        creado.append("plan de estudios sugerido por grado")
+    if not Bloque.objects.filter(colegio=colegio).exists():
+        Bloque.objects.bulk_create([Bloque(colegio=colegio, nombre=n, inicio=i, fin=f, descanso=d) for n, i, f, d in ESTRUCTURA_JORNADA])
+        creado.append("jornada de 6 horas con un descanso")
+    return creado
+
+
+@capacidad("academico")
+@require_POST
+def estructura_tipica(request):
+    creado = crear_estructura_tipica(request.user.colegio, timezone.localdate())
+    if creado:
+        registrar(request, "Creó la estructura típica", "; ".join(creado))
+        messages.success(
+            request,
+            "Se creó: " + "; ".join(creado) + ". Todo es un punto de partida: ajuste fechas, grados, "
+            "asignaturas y horas a su proyecto educativo.",
+        )
+    else:
+        messages.success(request, "El colegio ya tenía toda la estructura básica; no se creó nada.")
+    return redirect("panel")
+
+
+# --------------------------------------------------------------------------
+# Cuenta del estudiante, exportaciones y bitácora
+# --------------------------------------------------------------------------
+
+
+@capacidad("estudiantes")
+@require_POST
+def crear_cuenta_estudiante(request, pk):
+    est = get_object_or_404(Estudiante, pk=pk, colegio=request.user.colegio)
+    if est.usuario_id:
+        messages.error(request, "Este estudiante ya tiene cuenta. Si olvidó la contraseña, genere una nueva.")
+    elif Usuario.objects.filter(username=est.documento).exists():
+        messages.error(request, f"Ya existe otra cuenta con el documento {est.documento}. Revise el documento del estudiante.")
+    else:
+        clave = forms.clave_temporal()
+        with transaction.atomic():
+            usuario = Usuario(username=est.documento, documento=est.documento, colegio=est.colegio, rol="estudiante",
+                              first_name=est.nombres, last_name=est.apellidos, debe_cambiar_clave=True)
+            usuario.set_password(clave)
+            usuario.save()
+            est.usuario = usuario
+            est.save(update_fields=["usuario"])
+        messages.success(
+            request,
+            f"Cuenta del estudiante creada. Usuario: {usuario.username}. Contraseña temporal: {clave}. "
+            "Anótela ahora: no se vuelve a mostrar.",
+        )
+    return redirect("ficha_estudiante", est.pk)
+
+
+def libro_excel(nombre, titulo, encabezados, filas):
+    from io import BytesIO
+
+    from openpyxl import Workbook
+    from openpyxl.styles import Font
+
+    libro = Workbook()
+    hoja = libro.active
+    hoja.title = titulo[:31]
+    hoja.append(encabezados)
+    for celda in hoja[1]:
+        celda.font = Font(bold=True)
+    for fila in filas:
+        hoja.append(fila)
+    for i, encabezado in enumerate(encabezados):
+        ancho = max([len(str(encabezado))] + [len(str(f[i])) for f in filas if f[i] is not None] or [10])
+        hoja.column_dimensions[hoja.cell(row=1, column=i + 1).column_letter].width = min(ancho + 2, 48)
+    hoja.freeze_panes = "A2"
+    salida = BytesIO()
+    libro.save(salida)
+    respuesta = HttpResponse(salida.getvalue(), content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    respuesta["Content-Disposition"] = f'attachment; filename="{nombre}.xlsx"'
+    return respuesta
+
+
+@capacidad("estudiantes")
+def exportar_estudiantes(request):
+    anio = request.user.colegio.anio_activo
+    filas = []
+    for m in Matricula.objects.filter(grupo__anio=anio, activa=True).select_related("estudiante", "grupo__grado").prefetch_related(
+        "estudiante__acudiencia_set__acudiente"
+    ).order_by("grupo__grado__orden", "grupo__nombre", "estudiante__apellidos"):
+        e = m.estudiante
+        acs = list(e.acudiencia_set.all())
+        filas.append([
+            str(m.grupo), e.apellidos, e.nombres, e.tipo_documento, e.documento,
+            e.fecha_nacimiento.strftime("%d/%m/%Y") if e.fecha_nacimiento else "",
+            "; ".join(f"{a.acudiente.nombre_completo} ({a.get_parentesco_display()})" for a in acs),
+            "; ".join(a.acudiente.telefono for a in acs if a.acudiente.telefono),
+            "; ".join(a.acudiente.email for a in acs if a.acudiente.email),
+        ])
+    return libro_excel("estudiantes", "Estudiantes", ["Grupo", "Apellidos", "Nombres", "Tipo", "Documento", "Nacimiento",
+                                                      "Acudientes", "Teléfonos", "Correos"], filas)
+
+
+@capacidad("notas")
+def exportar_consolidado(request):
+    anio, grupos_qs, periodos, grupo, periodo = _seleccion(request)
+    if not grupo or not periodo:
+        raise Http404
+    colegio = request.user.colegio
+    matriculas = list(grupo.matriculas.filter(activa=True).select_related("estudiante"))
+    datos, clases_por_grupo = calculos.consolidar(matriculas, [periodo], colegio)
+    clases = clases_por_grupo[grupo.id]
+    puestos, _ = calculos.puestos({m.id: datos[m.id]["promedios"][periodo.id] for m in matriculas})
+    numero = lambda v: float(v) if v is not None else None  # noqa: E731
+    filas = [
+        [str(m.estudiante), m.estudiante.documento]
+        + [numero(datos[m.id]["clases"][c.id]["periodos"][periodo.id]) for c in clases]
+        + [numero(datos[m.id]["promedios"][periodo.id]), puestos.get(m.id), calculos.perdidas(datos[m.id], colegio, periodo)]
+        for m in matriculas
+    ]
+    return libro_excel(f"consolidado_{grupo}_{periodo.numero}".replace("°", ""), f"{grupo} P{periodo.numero}",
+                       ["Estudiante", "Documento"] + [c.asignatura.nombre for c in clases] + ["Promedio", "Puesto", "Perdidas"], filas)
+
+
+@capacidad("configuracion")
+def bitacora(request):
+    pagina = Paginator(Bitacora.objects.filter(colegio=request.user.colegio).select_related("usuario"), 60).get_page(
+        request.GET.get("pagina")
+    )
+    return render(request, "admin_colegio/bitacora.html", {"pagina": pagina})

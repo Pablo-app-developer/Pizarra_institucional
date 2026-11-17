@@ -11,21 +11,25 @@ MENU_DIRECTIVO = [
     ("Inicio", "panel", "inicio", None),
     ("Estudiantes", "gestion_lista:estudiantes", "personas", "estudiantes"),
     ("Acudientes", "gestion_lista:acudientes", "familia", "estudiantes"),
-    ("Docentes", "gestion_lista:docentes", "docente", "academico"),
+    ("Docentes", "gestion_lista:docentes", "docente", "docentes"),
     ("Grupos y clases", "grupos", "grupos", "academico"),
     ("Plan de estudios", "plan", "plan", "academico"),
     ("Horarios", "horarios", "horario", "academico"),
-    ("Consolidado de notas", "consolidado", "notas", "academico"),
+    ("Consolidado de notas", "consolidado", "notas", "notas"),
     ("Boletines", "boletines", "boletin", "boletines"),
     ("Pensiones", "cartera", "pension", "pensiones"),
     ("Comunicados", "comunicados", "comunicado", "comunicados"),
-    ("Configuración", "configuracion", "ajustes", None),
+    ("Configuración", "configuracion", "ajustes", ("configuracion", "academico", "cierres")),
 ]
 MENU_DOCENTE = [
     ("Mis clases", "mis_clases", "inicio", None),
     ("Mi horario", "mi_horario", "horario", None),
     ("Comunicados", "comunicados", "comunicado", None),
 ]
+
+
+# Entradas del menú que dependen de un módulo opcional.
+POR_MODULO = {"plan": "plan", "horarios": "horarios", "mi_horario": "horarios", "cartera": "pensiones", "comunicados": "comunicados"}
 
 
 def navegacion(request):
@@ -37,9 +41,12 @@ def navegacion(request):
     if not usuario.colegio_id:
         return {}
     items = []
+    colegio = usuario.colegio
     if usuario.es_directivo or usuario.es_docente:
         for etiqueta, nombre, icono, cap in MENU_DIRECTIVO if usuario.es_directivo else MENU_DOCENTE:
-            if cap and not usuario.puede(cap):
+            if cap and not any(usuario.puede(c) for c in ([cap] if isinstance(cap, str) else cap)):
+                continue
+            if nombre in POR_MODULO and not colegio.tiene(POR_MODULO[nombre]):
                 continue
             ruta, _, arg = nombre.partition(":")
             items.append({"etiqueta": etiqueta, "url": reverse(ruta, args=[arg] if arg else []), "icono": icono})
@@ -50,9 +57,11 @@ def navegacion(request):
                 "etiqueta": h.nombres.split()[0] if len(hijos) > 1 else "Resumen",
                 "url": reverse("familia_resumen", args=[h.pk]), "icono": "inicio",
             })
-        items.append({"etiqueta": "Comunicados", "url": reverse("comunicados"), "icono": "comunicado"})
-    sin_leer = Aviso.objects.filter(usuario=usuario, leido=False).count()
-    items.append({"etiqueta": "Avisos", "url": reverse("avisos"), "icono": "aviso", "contador": sin_leer})
+        if colegio.tiene("comunicados"):
+            items.append({"etiqueta": "Comunicados", "url": reverse("comunicados"), "icono": "comunicado"})
+    if colegio.tiene("avisos"):
+        sin_leer = Aviso.objects.filter(usuario=usuario, leido=False).count()
+        items.append({"etiqueta": "Avisos", "url": reverse("avisos"), "icono": "aviso", "contador": sin_leer})
 
     # El ítem activo es el de URL más larga que sea prefijo de la ruta actual.
     actual, activo = request.path, None
@@ -63,5 +72,5 @@ def navegacion(request):
                 activo = it
     for it in items:
         it["activo"] = it is activo
-    capacidades = usuario.CAPACIDADES.get(usuario.cargo or "rector", set()) if usuario.es_directivo else set()
-    return {"menu": items, "colegio": usuario.colegio, "capacidades": capacidades}
+    capacidades = set(usuario.permisos or []) if usuario.es_directivo else set()
+    return {"menu": items, "colegio": colegio, "capacidades": capacidades, "modulos": set(colegio.modulos or [])}

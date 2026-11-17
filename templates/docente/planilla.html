@@ -1,36 +1,81 @@
 {% extends "docente/_clase.html" %}{% load pizarra l10n %}
-{% block acciones %}{% if plan %}<a class="boton boton--secundario" href="{% url 'logros' plan.pk %}">Logros del periodo</a>{% endif %}{% if not periodo.cerrado %}<a class="boton" href="{% url 'actividad_nueva' clase.pk %}?periodo={{ periodo.pk }}">Nueva actividad</a>{% endif %}{% endblock %}
+{% block acciones %}{% if plan and "plan" in modulos %}<a class="boton boton--secundario" href="{% url 'logros' plan.pk %}">Logros del periodo</a>{% endif %}{% endblock %}
 {% block clase %}
-{% include "docente/_periodos.html" %}
+<div class="planilla-barra">
+  {% include "docente/_periodos.html" %}
+  {% if actividades %}<div class="planilla-barra__excel">
+    <a class="boton boton--secundario boton--chico" href="{% url 'planilla_excel' clase.pk %}?periodo={{ periodo.pk }}">Descargar en Excel</a>
+    {% if not periodo.cerrado %}<form method="post" action="{% url 'subir_planilla' clase.pk %}?periodo={{ periodo.pk }}" enctype="multipart/form-data" class="subir-excel">{% csrf_token %}
+      <label class="boton boton--secundario boton--chico">Subir desde Excel<input type="file" name="archivo" accept=".xlsx" data-subir-al-elegir hidden></label></form>{% endif %}
+  </div>{% endif %}
+</div>
 {% if periodo.cerrado %}<p class="aviso aviso--info">{{ periodo.nombre }} está cerrado. Las notas se pueden consultar, pero no cambiar. Si necesita corregir una, pida a coordinación que reabra el periodo.</p>{% endif %}
-{% if pesos_incompletos %}<p class="aviso">Los pesos de las actividades suman {{ suma_pesos|floatformat:"-2" }} %, no 100 %. Mientras tanto, la definitiva se calcula en proporción a lo ya calificado.</p>{% endif %}
-{% if not actividades %}
-<div class="panel vacio"><p><strong>Esta clase aún no tiene actividades en {{ periodo.nombre|lower }}.</strong></p>
-<p>Cree la primera (un taller, una evaluación, una exposición) y aparecerá como columna para calificar.</p>
-{% if not periodo.cerrado %}<p><a class="boton" href="{% url 'actividad_nueva' clase.pk %}?periodo={{ periodo.pk }}">Nueva actividad</a></p>{% endif %}</div>
-{% elif not filas %}
-<div class="panel vacio"><p>Este grupo no tiene estudiantes matriculados.</p></div>
-{% else %}
-<form method="post" novalidate>
+{% if pesos_incompletos %}<p class="aviso">Los porcentajes de las actividades suman {{ suma_pesos|floatformat:"-2" }} %, no 100 %. Mientras tanto, la definitiva se calcula en proporción a lo ya calificado.</p>{% endif %}
+
+<form method="post" novalidate id="form-planilla">
   {% csrf_token %}<input type="hidden" name="periodo" value="{{ periodo.pk }}">
-  <div class="tabla-envoltura"><table class="planilla" data-planilla data-min="{{ colegio.nota_minima|unlocalize }}" data-max="{{ colegio.nota_maxima|unlocalize }}">
+
+{% if not actividades %}
+  <div class="panel primera-actividad">
+    <div class="panel__cuerpo">
+      <h2>Empiece por la primera actividad</h2>
+      <p class="secundario" style="margin:4px 0 16px">Cada actividad es una columna de la planilla: un taller, una evaluación, una exposición. Escriba solo el nombre; lo demás es opcional.</p>
+      {% if periodo.cerrado %}<p>Este periodo está cerrado.</p>{% elif not filas %}<p>Este grupo aún no tiene estudiantes matriculados.</p>{% else %}
+      <div class="agregar-columna">
+        <label for="nueva-actividad" class="oculto-visual">Nombre de la actividad</label>
+        <input type="text" id="nueva-actividad" name="nueva_actividad" maxlength="120" placeholder="Por ejemplo: Taller de fracciones" list="sugerencias" autofocus>
+        <button class="boton" type="submit" name="agregar" value="1">Agregar y calificar</button>
+      </div>
+      <p class="campo__ayuda" style="margin-top:12px">¿Ya tiene las notas en Excel? <a href="{% url 'planilla_excel' clase.pk %}?periodo={{ periodo.pk }}">Descargue la planilla</a>, escriba los nombres de las actividades en la fila de títulos con sus notas y súbala.</p>
+      {% endif %}
+    </div>
+  </div>
+{% elif not filas %}
+  <div class="panel vacio"><p>Este grupo no tiene estudiantes matriculados.</p></div>
+{% else %}
+  <div class="aviso aviso--info borrador" data-borrador hidden role="status">
+    Hay notas que escribió en este equipo y no alcanzó a guardar.
+    <button type="button" class="enlace-boton" data-borrador-recuperar>Recuperarlas</button>
+    <button type="button" class="enlace-boton" data-borrador-descartar>Descartarlas</button>
+  </div>
+  <p class="solo-movil aviso aviso--info">En el celular es más cómodo calificar una actividad a la vez: toque <strong>Calificar</strong> bajo el nombre de la actividad.</p>
+  <div class="tabla-envoltura"><table class="planilla" data-planilla data-min="{{ colegio.nota_minima|unlocalize }}" data-max="{{ colegio.nota_maxima|unlocalize }}"
+      data-basico="{{ colegio.desde_basico|unlocalize }}" data-alto="{{ colegio.desde_alto|unlocalize }}" data-superior="{{ colegio.desde_superior|unlocalize }}"
+      data-decimales="{{ decimales }}" data-borrador-clave="planilla-{{ clase.pk }}-{{ periodo.pk }}" data-foco="{{ foco }}">
     <thead><tr><th class="fija">Estudiante</th>
-      {% for a in actividades %}<th class="actividad" scope="col">{% if periodo.cerrado %}{{ a.titulo }}{% else %}<a href="{% url 'actividad_editar' clase.pk a.pk %}" title="Editar actividad">{{ a.titulo }}</a>{% endif %}
-        <small>{{ a.get_tipo_display }}{% if a.peso %}, {{ a.peso|floatformat:"-2" }} %{% endif %}<br>{{ a.fecha|date:"j M"|lower }}</small></th>{% endfor %}
+      {% for a in actividades %}<th class="actividad" scope="col" data-actividad="{{ a.pk }}" data-peso="{{ a.peso|unlocalize }}">
+        <span class="actividad__titulo">{{ a.titulo }}</span>
+        <small>{{ a.fecha|date:"j M"|lower }}{% if a.peso %}, {{ a.peso|floatformat:"-2" }} %{% endif %}</small>
+        {% if not periodo.cerrado %}<span class="actividad__acciones"><a href="{% url 'calificar' clase.pk a.pk %}" title="Calificar solo esta actividad">Calificar</a><a href="{% url 'actividad_editar' clase.pk a.pk %}" title="Cambiar nombre, fecha o porcentaje">Editar</a></span>{% endif %}</th>{% endfor %}
+      {% if not periodo.cerrado %}<th class="columna-nueva" scope="col"><div class="columna-nueva__caja">
+        <label for="nueva-actividad" class="oculto-visual">Nombre de la nueva actividad</label>
+        <input type="text" id="nueva-actividad" name="nueva_actividad" maxlength="120" placeholder="Nueva actividad" list="sugerencias">
+        <button class="boton boton--chico boton--secundario" type="submit" name="agregar" value="1">Agregar columna</button></div></th>{% endif %}
       <th class="definitiva">Definitiva</th></tr></thead>
     <tbody>{% for f in filas %}<tr>
-      <th scope="row" class="fija"><a href="{% url 'observador' f.matricula.pk %}?volver={{ clase.pk }}" style="color:inherit;text-decoration:none">{{ f.matricula.estudiante }}</a></th>
-      {% for c in f.celdas %}<td class="celda"><input type="text" inputmode="decimal" name="{{ c.nombre }}" value="{{ c.valor|default_if_none:'' }}" maxlength="4" autocomplete="off"
+      <th scope="row" class="fija">{% if "observador" in modulos %}<a href="{% url 'observador' f.matricula.pk %}?volver={{ clase.pk }}" class="nombre-estudiante">{{ f.matricula.estudiante }}</a>{% else %}{{ f.matricula.estudiante }}{% endif %}</th>
+      {% for c in f.celdas %}<td class="celda"><input type="text" inputmode="decimal" name="{{ c.nombre }}" value="{{ c.valor|valor_casilla }}" maxlength="5" autocomplete="off"
         aria-label="{{ f.matricula.estudiante }}, {{ c.actividad }}"{% if c.error %} class="invalida" aria-invalid="true" title="{{ c.error }}"{% endif %}{% if periodo.cerrado %} disabled{% endif %}></td>{% endfor %}
-      <td class="definitiva">{% if f.definitiva is None %}<span class="secundario">—</span>{% else %}{% desempeno f.definitiva %}{% endif %}</td>
+      {% if not periodo.cerrado %}<td class="columna-nueva"></td>{% endif %}
+      <td class="definitiva" data-definitiva>{% if f.definitiva is None %}<span class="secundario">—</span>{% else %}{% desempeno f.definitiva %}{% endif %}</td>
     </tr>{% endfor %}</tbody>
   </table></div>
   <div class="barra-guardar">
-    <span class="pequeno">Promedio del grupo <strong>{{ promedio_grupo|nota }}</strong>. {% if perdiendo %}{{ perdiendo }} estudiante{{ perdiendo|pluralize }} por debajo de {{ colegio.desde_basico }}.{% else %}Nadie por debajo de {{ colegio.desde_basico }}.{% endif %}
-    <span data-estado-planilla class="secundario" aria-live="polite"></span></span>
-    {% if not periodo.cerrado %}<button class="boton" type="submit">Guardar planilla</button>{% endif %}
+    <span class="pequeno">Promedio del grupo <strong>{{ promedio_grupo|nota }}</strong>. {% if perdiendo %}{{ perdiendo }} estudiante{{ perdiendo|pluralize }} por debajo de {{ colegio.desde_basico|nota }}.{% else %}Nadie por debajo de {{ colegio.desde_basico|nota }}.{% endif %}
+    <span data-estado-planilla class="estado-planilla" aria-live="polite"></span></span>
+    {% if not periodo.cerrado %}<button class="boton" type="submit" name="guardar" value="1">Guardar notas</button>{% endif %}
   </div>
-  <p class="campo__ayuda" style="margin-top:10px">Escala de {{ colegio.nota_minima }} a {{ colegio.nota_maxima }}. Deje la casilla vacía si el estudiante no tiene nota. Muévase con las flechas o con Enter.</p>
-</form>
+  <details class="ayuda-planilla"><summary>Cómo llenar la planilla más rápido</summary>
+    <ul>
+      <li>Escriba la nota y presione <kbd>Enter</kbd> para bajar al siguiente estudiante. Las flechas también mueven entre casillas.</li>
+      <li>Puede escribir {% if decimales %}<strong>45</strong> y se entiende 4,5, o <strong>4,5</strong> con coma o punto{% else %}la nota sin decimales{% endif %}. La escala es de {{ colegio.nota_minima|nota }} a {{ colegio.nota_maxima|nota }}.</li>
+      <li>¿Tiene las notas en Excel? Copie la columna en Excel, haga clic en la primera casilla aquí y pegue: se llenan todas hacia abajo.</li>
+      <li>En el celular es más cómodo <strong>Calificar</strong> una actividad a la vez, desde el título de cada columna.</li>
+      <li>Si se cae el internet, lo que escribió queda guardado en este equipo y puede recuperarlo al volver.</li>
+    </ul></details>
 {% endif %}
+</form>
+{% if not actividades and filas and not periodo.cerrado %}<form method="post" action="{% url 'subir_planilla' clase.pk %}?periodo={{ periodo.pk }}" enctype="multipart/form-data" class="subir-excel" style="margin-top:12px">{% csrf_token %}
+  <label class="boton boton--secundario">Subir planilla de Excel<input type="file" name="archivo" accept=".xlsx" data-subir-al-elegir hidden></label></form>{% endif %}
+<datalist id="sugerencias">{% for s in sugerencias %}<option value="{{ s }}">{% endfor %}</datalist>
 {% endblock %}

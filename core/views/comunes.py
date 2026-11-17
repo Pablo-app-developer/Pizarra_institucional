@@ -20,7 +20,7 @@ from ..models import (
     Aviso, Colegio, ComentarioBoletin, Comunicado, Entrega, Grupo, Logro, Matricula, Periodo,
     ValoracionDescriptiva,
 )
-from ..permisos import cualquiera, estudiantes_de
+from ..permisos import cualquiera, estudiantes_de, modulo
 
 
 def periodo_vigente(anio):
@@ -82,6 +82,7 @@ def comunicados_para(usuario):
 
 
 @cualquiera
+@modulo("comunicados")
 def comunicados(request):
     return render(request, "base/comunicados.html", {"comunicados": comunicados_para(request.user)[:50]})
 
@@ -198,6 +199,7 @@ def mi_cuenta(request):
 
 
 @cualquiera
+@modulo("avisos")
 def avisos(request):
     lista = list(Aviso.objects.filter(usuario=request.user)[:60])
     nuevos = [a.pk for a in lista if not a.leido]
@@ -227,7 +229,7 @@ def archivo_entrega(request, pk):
     if u.es_familia:
         permitido = estudiantes_de(u).filter(pk=entrega.matricula.estudiante_id).exists()
     else:
-        permitido = u.puede("academico") or entrega.tarea.clase.docente_id == u.id
+        permitido = u.puede("notas") or entrega.tarea.clase.docente_id == u.id
     if not permitido:
         raise PermissionDenied
     if not entrega.archivo:

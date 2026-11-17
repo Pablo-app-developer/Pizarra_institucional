@@ -4,9 +4,12 @@ import string
 from django import forms
 from django.core.exceptions import ValidationError
 
+from django.db import transaction
+
+from . import escala as escala_mod
 from .models import (
     Actividad, Acudiencia, AnioLectivo, Asignatura, Bloque, Clase, Cobro, Colegio, Comunicado, Estudiante,
-    Grado, Grupo, Logro, Matricula, Observacion, Pago, Periodo, PlanEstudio, Tarea, Usuario,
+    Grado, Grupo, Logro, Matricula, Nota, Observacion, Pago, Periodo, PlanEstudio, Recuperacion, Tarea, Usuario,
 )
 
 # Sin caracteres que se confunden al dictarlos o copiarlos a mano (0/O, 1/l).
@@ -84,6 +87,15 @@ def procesar_escudo(archivo):
 
 
 class ColegioForm(forms.ModelForm):
+    escala = forms.ChoiceField(
+        label="Sistema de evaluación", required=False,
+        choices=[(k, v[0]) for k, v in escala_mod.PREDEFINIDAS.items()] + [("", "Personalizada")],
+        help_text="Elija una escala y se llenan los valores de abajo. Puede ajustarlos para crear la suya.",
+    )
+    convertir_notas = forms.BooleanField(
+        label="Convertir las notas ya registradas a la nueva escala", required=False,
+        help_text="Cada nota conserva su nivel de desempeño (quien iba en Básico sigue en Básico). No se puede deshacer.",
+    )
     imagen_escudo = forms.FileField(
         label="Escudo del colegio", required=False,
         help_text="PNG, JPG o WebP, preferiblemente con fondo transparente. Sale en el menú, el ingreso y los informes.",
@@ -95,11 +107,14 @@ class ColegioForm(forms.ModelForm):
         fields = [
             "nombre", "lema", "color", "nit", "codigo_dane", "resolucion", "nombre_rector", "ciudad",
             "direccion", "telefono", "correo", "nota_minima", "desde_basico", "desde_alto",
-            "desde_superior", "nota_maxima", "tope_recuperacion", "perdidas_para_reprobar",
+            "desde_superior", "nota_maxima", "decimales", "tope_recuperacion", "perdidas_para_reprobar",
         ]
         widgets = {"color": forms.TextInput(attrs={"type": "color"})}
 
-    field_order = ["nombre", "lema", "imagen_escudo", "quitar_escudo", "color"]
+    IDENTIDAD = ["nombre", "lema", "imagen_escudo", "quitar_escudo", "color"]
+    DATOS = ["nit", "codigo_dane", "resolucion", "nombre_rector", "ciudad", "direccion", "telefono", "correo"]
+    EVALUACION = ["escala", "nota_minima", "desde_basico", "desde_alto", "desde_superior", "nota_maxima",
+                  "decimales", "convertir_notas", "tope_recuperacion", "perdidas_para_reprobar"]
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -107,6 +122,46 @@ class ColegioForm(forms.ModelForm):
             del self.fields["quitar_escudo"]
         if not self.instance.color:
             self.initial["color"] = "#14523f"
+        self.initial["escala"] = escala_mod.clave_de(self.instance)
+        self.cortes_previos = list(self.instance.cortes)
+        self.decimales_previos = self.instance.decimales
+        self.hay_notas = Nota.objects.filter(matricula__estudiante__colegio=self.instance).exists()
+        if not self.hay_notas:
+            del self.fields["convertir_notas"]
+        self.notas_convertidas = 0
+        self.cambio_escala = False
+
+    def grupo(self, nombres):
+        return [self[n] for n in nombres if n in self.fields]
+
+    @property
+    def campos_identidad(self):
+        return self.grupo(self.IDENTIDAD)
+
+    @property
+    def campos_datos(self):
+        return self.grupo(self.DATOS)
+
+    @property
+    def campos_evaluacion(self):
+        return self.grupo(self.EVALUACION)
+
+    def clean(self):
+        datos = super().clean()
+        nuevos = [datos.get(c) for c in ("nota_minima", "desde_basico", "desde_alto", "desde_superior", "nota_maxima")]
+        if None in nuevos:
+            return datos
+        self.cambio_escala = nuevos != self.cortes_previos or datos.get("decimales") != self.decimales_previos
+        # Si el tope de recuperación era el mínimo aprobatorio, sigue siéndolo en la nueva escala.
+        if nuevos != self.cortes_previos and datos.get("tope_recuperacion") == self.cortes_previos[1]:
+            datos["tope_recuperacion"] = nuevos[1]
+            self.instance.tope_recuperacion = nuevos[1]
+        if self.cambio_escala and self.hay_notas and not datos.get("convertir_notas"):
+            raise ValidationError(
+                "Ya hay notas registradas con la escala actual. Para cambiarla, marque la casilla "
+                "«Convertir las notas ya registradas»; de lo contrario quedarían fuera de la nueva escala."
+            )
+        return datos
 
     def clean_imagen_escudo(self):
         archivo = self.cleaned_data.get("imagen_escudo")
@@ -126,8 +181,32 @@ class ColegioForm(forms.ModelForm):
             colegio.escudo, colegio.escudo_tipo = None, ""
             colegio.escudo_version += 1
         if commit:
-            colegio.save()
+            with transaction.atomic():
+                colegio.save()
+                if getattr(self, "cambio_escala", False) and self.hay_notas:
+                    self.notas_convertidas = convertir_notas_del_colegio(
+                        colegio, self.cortes_previos, colegio.cortes, colegio.decimales
+                    )
         return colegio
+
+
+def convertir_notas_del_colegio(colegio, vieja, nueva, decimales):
+    """Convierte todas las notas y recuperaciones del colegio a la nueva escala. Devuelve cuántas cambió."""
+    total = 0
+    for modelo, filtro in ((Nota, {"matricula__estudiante__colegio": colegio}),
+                           (Recuperacion, {"matricula__estudiante__colegio": colegio})):
+        lote = []
+        for obj in modelo.objects.filter(**filtro).only("id", "valor").iterator(chunk_size=2000):
+            obj.valor = escala_mod.convertir(obj.valor, vieja, nueva, decimales)
+            lote.append(obj)
+            if len(lote) >= 2000:
+                modelo.objects.bulk_update(lote, ["valor"])
+                total += len(lote)
+                lote = []
+        if lote:
+            modelo.objects.bulk_update(lote, ["valor"])
+            total += len(lote)
+    return total
 
 
 class AnioForm(FormularioColegio):
@@ -275,17 +354,51 @@ class AcudienteForm(PersonaForm):
 
 
 class DirectivoForm(PersonaForm):
+    """Cuenta directiva o administrativa. El cargo propone permisos; quien edita decide cuáles quedan."""
+
     rol = "directivo"
+    permisos = forms.MultipleChoiceField(
+        label="Permisos", required=False, widget=forms.CheckboxSelectMultiple,
+        choices=[(clave, nombre) for clave, nombre, _ in Usuario.PERMISOS],
+    )
 
     class Meta(PersonaForm.Meta):
         fields = ["first_name", "last_name", "documento", "cargo", "email", "telefono", "is_active"]
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, editor=None, **kwargs):
         super().__init__(*args, **kwargs)
+        self.editor = editor
         self.fields["cargo"].required = True
-        self.fields["cargo"].help_text = (
-            "Rectoría: todo. Coordinación: lo académico. Secretaría: estudiantes, boletines y pensiones."
-        )
+        self.fields["permisos"].initial = self.instance.permisos if self.instance.pk else []
+        self.descripciones = {clave: texto for clave, _, texto in Usuario.PERMISOS}
+
+    def clean(self):
+        datos = super().clean()
+        permisos = datos.get("permisos") or []
+        activa = datos.get("is_active")
+        if self.instance.pk:
+            otros = Usuario.objects.filter(colegio=self.colegio, rol="directivo", is_active=True).exclude(
+                pk=self.instance.pk
+            )
+            pierde = "configuracion" not in permisos or not activa
+            if pierde and "configuracion" in (self.instance.permisos or []) and not _hay_otro_configurador(otros):
+                raise ValidationError(
+                    "Esta es la única cuenta activa que puede administrar permisos. "
+                    "Dé ese permiso a otra persona antes de quitárselo a esta."
+                )
+        return datos
+
+    def save(self, commit=True):
+        usuario = super().save(commit=False)
+        usuario.permisos = sorted(self.cleaned_data.get("permisos") or [])
+        if commit:
+            usuario.save()
+        return usuario
+
+
+def _hay_otro_configurador(candidatos):
+    # JSON no se filtra igual en SQLite y PostgreSQL: se verifica en Python, son muy pocas cuentas.
+    return any("configuracion" in (u.permisos or []) for u in Usuario.objects.filter(pk__in=candidatos.values("pk")))
 
 
 class MiCuentaForm(forms.ModelForm):

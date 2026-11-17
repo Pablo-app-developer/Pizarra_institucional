@@ -1,11 +1,11 @@
 {% extends "docente/_clase.html" %}{% load pizarra %}
 {% block clase %}
 {% include "docente/_periodos.html" %}
-<p class="aviso aviso--info">Aparecen quienes perdieron la asignatura en {{ periodo.nombre|lower }}. La recuperación reemplaza la nota del periodo solo si la mejora{% if colegio.tope_recuperacion %}, y hasta {{ colegio.tope_recuperacion }}{% endif %}. Las notas de las actividades no se modifican.</p>
+<p class="aviso aviso--info">Aparecen quienes perdieron la asignatura en {{ periodo.nombre|lower }}. La recuperación reemplaza la nota del periodo solo si la mejora{% if colegio.tope_recuperacion %}, y hasta {{ colegio.tope_recuperacion|nota }}{% endif %}. Las notas de las actividades no se modifican.</p>
 {% if filas %}<form method="post" novalidate>{% csrf_token %}<input type="hidden" name="periodo" value="{{ periodo.pk }}">
 <div class="tabla-envoltura"><table class="personas planilla"><thead><tr><th>Estudiante</th><th>Nota del periodo</th><th class="centro">Nota de recuperación</th><th>Queda con</th></tr></thead>
 <tbody>{% for f in filas %}<tr><th scope="row">{{ f.matricula.estudiante }}</th><td>{% desempeno f.original %}</td>
-<td class="celda"><input type="text" inputmode="decimal" name="r_{{ f.matricula.pk }}" value="{{ f.valor }}" maxlength="4" autocomplete="off" aria-label="Recuperación de {{ f.matricula.estudiante }}"{% if f.error %} class="invalida" aria-invalid="true" title="{{ f.error }}"{% endif %}></td>
+<td class="celda"><input type="text" inputmode="decimal" name="r_{{ f.matricula.pk }}" value="{{ f.valor }}" maxlength="5" autocomplete="off" aria-label="Recuperación de {{ f.matricula.estudiante }}"{% if f.error %} class="invalida" aria-invalid="true" title="{{ f.error }}"{% endif %}></td>
 <td>{% desempeno f.queda %}</td></tr>{% endfor %}</tbody></table></div>
 <div class="barra-guardar"><span class="pequeno secundario">Deje la casilla vacía si no presentó recuperación.</span><button class="boton" type="submit">Guardar recuperaciones</button></div></form>
 {% else %}<div class="panel vacio"><p>Nadie perdió la asignatura en {{ periodo.nombre|lower }}.</p></div>{% endif %}

@@ -9,11 +9,12 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
 
 from .. import calculos, horarios as motor
+from ..bitacora import registrar
 from ..forms import LogroForm, PlanForm
 from ..models import (
     DIAS, AnioLectivo, Bloque, Clase, Grado, Grupo, HorarioClase, Logro, Matricula, Periodo, PlanEstudio,
 )
-from ..permisos import capacidad, estudiante_para, familia, personal
+from ..permisos import capacidad, estudiante_para, familia, modulo, personal
 
 # ------------------------------------------------------------ Plan de estudios
 
@@ -24,6 +25,7 @@ def _grado(request):
 
 
 @capacidad("academico")
+@modulo("plan")
 def plan(request):
     grados, grado = _grado(request)
     if grado is None:
@@ -50,6 +52,7 @@ def plan(request):
 
 @capacidad("academico")
 @require_POST
+@modulo("plan")
 def plan_quitar(request, pk):
     item = get_object_or_404(PlanEstudio, pk=pk, grado__colegio=request.user.colegio)
     grado_id = item.grado_id
@@ -71,6 +74,7 @@ def aplicar_plan(grupo):
 
 @capacidad("academico")
 @require_POST
+@modulo("plan")
 def plan_aplicar(request, grado_id):
     grado = get_object_or_404(Grado, pk=grado_id, colegio=request.user.colegio)
     anio = request.user.colegio.anio_activo
@@ -91,6 +95,7 @@ def _puede_editar_logros(usuario, item):
 
 
 @personal
+@modulo("plan")
 def logros(request, pk):
     """Logros de una asignatura en un grado. Los editan coordinación y el docente que la dicta."""
     item = get_object_or_404(
@@ -119,6 +124,7 @@ def logros(request, pk):
 
 
 @personal
+@modulo("plan")
 def malla(request, grado_id):
     """Malla curricular del grado, lista para imprimir."""
     grado = get_object_or_404(Grado, pk=grado_id, colegio=request.user.colegio)
@@ -140,6 +146,7 @@ def malla(request, grado_id):
 
 
 @capacidad("academico")
+@modulo("horarios")
 def horarios(request):
     colegio = request.user.colegio
     anio = colegio.anio_activo
@@ -161,6 +168,7 @@ def horarios(request):
 
 @capacidad("academico")
 @require_POST
+@modulo("horarios")
 def horarios_generar(request):
     anio = request.user.colegio.anio_activo
     if not anio or not motor.bloques_de_clase(request.user.colegio):
@@ -181,6 +189,7 @@ def horarios_generar(request):
 
 
 @capacidad("academico")
+@modulo("horarios")
 def horario_grupo(request, pk):
     colegio = request.user.colegio
     grupo = get_object_or_404(Grupo.objects.select_related("grado", "anio"), pk=pk, anio__colegio=colegio)
@@ -225,6 +234,7 @@ def horario_grupo(request, pk):
 
 
 @personal
+@modulo("horarios")
 def mi_horario(request):
     colegio = request.user.colegio
     entradas = HorarioClase.objects.filter(
@@ -237,6 +247,7 @@ def mi_horario(request):
 
 
 @familia
+@modulo("horarios")
 def familia_horario(request, pk):
     est = estudiante_para(request.user, pk)
     matricula = est.matricula_actual()
@@ -266,7 +277,7 @@ def _propuesta(datos, colegio, grado, hay_siguiente):
     return "promovido" if hay_siguiente else "graduado"
 
 
-@capacidad("academico")
+@capacidad("cierres")
 def cierre(request):
     colegio = request.user.colegio
     anio = colegio.anio_activo
@@ -299,6 +310,7 @@ def cierre(request):
             except ValueError as error:
                 messages.error(request, str(error))
             else:
+                registrar(request, "Creó el año siguiente", f"{nuevo.nombre}: {resumen['matriculados']} matriculados, {resumen['graduados']} graduados")
                 messages.success(
                     request,
                     f"Año {nuevo.nombre} creado: {resumen['matriculados']} estudiantes matriculados, "

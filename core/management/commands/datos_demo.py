@@ -22,7 +22,7 @@ from core.models import (
 
 NOMBRE = "Colegio Los Arrayanes"
 CLAVE = "pizarra2026"
-VERSION = 2  # súbalo cuando cambie el contenido del ejemplo: --actualizar lo recrea
+VERSION = 3  # súbalo cuando cambie el contenido del ejemplo: --actualizar lo recrea
 
 LOGROS = {
     "Matemáticas": ["Resuelve problemas con fracciones y decimales en contextos cotidianos.", "Plantea y soluciona ecuaciones de primer grado.", "Interpreta tablas y gráficas estadísticas.", "Calcula áreas y perímetros de figuras planas."],
@@ -154,6 +154,8 @@ class Command(BaseCommand):
         )
 
         def usuario(doc, nombres, apellidos, rol, **extra):
+            if "cargo" in extra and "permisos" not in extra:
+                extra["permisos"] = Usuario.PERMISOS_POR_CARGO[extra["cargo"]]
             u = Usuario(username=doc, documento=doc, first_name=nombres, last_name=apellidos, rol=rol, colegio=col, **extra)
             u.set_password(CLAVE)
             u.save()
@@ -162,6 +164,9 @@ class Command(BaseCommand):
         usuario("1001", "Beatriz Helena", "Mantilla Rueda", "directivo", cargo="rector", email="rectoria@losarrayanes.example")
         usuario("1002", "Hernán Darío", "Pabón Suárez", "directivo", cargo="coordinador")
         secretaria = usuario("1003", "Yolanda", "Afanador Rojas", "directivo", cargo="secretaria")
+        # Un administrativo con permisos a la medida: solo cartera y comunicados.
+        usuario("1004", "Wilson", "Carreño Díaz", "directivo", cargo="administrativo", permisos=["comunicados", "pensiones"])
+        usuario("1005", "Ricardo", "Niño Prada", "directivo", cargo="sistemas")
         docentes = [
             usuario("2001", "Jorge Enrique", "Serrano Prada", "docente", telefono="300 555 0101"),
             usuario("2002", "Diana Marcela", "Ardila Gómez", "docente", telefono="300 555 0102"),
@@ -387,6 +392,8 @@ class Command(BaseCommand):
         self.stdout.write("  Rectoría:      usuario 1001")
         self.stdout.write("  Coordinación:  usuario 1002")
         self.stdout.write("  Secretaría:    usuario 1003")
+        self.stdout.write("  Administrativo (solo cartera y comunicados): usuario 1004")
+        self.stdout.write("  Sistemas:      usuario 1005")
         self.stdout.write("  Docente:       usuario 2001 (Matemáticas, director de 6°A)")
         self.stdout.write("  Preescolar:    usuario 2007 (Transición, valoración descriptiva)")
         self.stdout.write(f"  Acudiente:  usuario {ejemplo.acudiente.username} ({ejemplo.acudiente.nombre_completo}, de {ejemplo.estudiante.nombre_natural})")

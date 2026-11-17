@@ -9,7 +9,7 @@
 <form method="post">{% csrf_token %}<input type="hidden" name="periodo" value="{{ periodo.pk }}">
 <div class="tabla-envoltura"><table class="personas">
   <thead><tr><th>Estudiante</th><th>Promedio</th><th class="centro">Puesto</th><th>Asignaturas perdidas</th><th style="min-width:300px">Observación para el boletín</th></tr></thead>
-  <tbody>{% for f in filas %}<tr><th scope="row"><a href="{% url 'observador' f.matricula.pk %}">{{ f.matricula.estudiante }}</a></th>
+  <tbody>{% for f in filas %}<tr><th scope="row">{% if "observador" in modulos %}<a href="{% url 'observador' f.matricula.pk %}">{{ f.matricula.estudiante }}</a>{% else %}{{ f.matricula.estudiante }}{% endif %}</th>
     <td>{% desempeno f.promedio %}</td><td class="centro">{{ f.puesto|default:"—" }}</td>
     <td>{% if f.perdidas %}{{ f.perdidas|join:", " }}{% else %}<span class="secundario">Ninguna</span>{% endif %}</td>
     <td><textarea name="c_{{ f.matricula.pk }}" rows="2" aria-label="Observación de {{ f.matricula.estudiante }}"{% if periodo.cerrado %} disabled{% endif %}>{{ f.comentario }}</textarea></td></tr>

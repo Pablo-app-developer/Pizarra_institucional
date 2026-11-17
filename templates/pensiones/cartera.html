@@ -2,7 +2,7 @@
 {% block titulo %}Pensiones{% endblock %}
 {% block contenido %}
 <div class="encabezado"><div><h1>Pensiones</h1><p class="encabezado__sub">Cobros, pagos recibidos y cartera del año {{ anio.nombre }}.</p></div>
-{% if anio and totales.vencido %}<div class="encabezado__acciones"><form method="post" action="{% url 'recordar_mora' %}" data-confirmar="Se enviará un aviso a los acudientes de los estudiantes con saldo vencido. ¿Enviar?">{% csrf_token %}<button class="boton boton--secundario" type="submit">Recordar a quienes están en mora</button></form></div>{% endif %}</div>
+{% if anio %}<div class="encabezado__acciones"><a class="boton boton--secundario" href="{% url 'exportar_cartera' %}">Descargar en Excel</a>{% if totales.vencido %}<form method="post" action="{% url 'recordar_mora' %}" data-confirmar="Se enviará un aviso a los acudientes de los estudiantes con saldo vencido. ¿Enviar?">{% csrf_token %}<button class="boton boton--secundario" type="submit">Recordar a quienes están en mora</button></form>{% endif %}</div>{% endif %}</div>
 {% if not anio %}<div class="panel vacio"><p>No hay un año lectivo activo.</p></div>{% else %}
 <dl class="cifras">
   <div class="cifra"><dt>Cobrado</dt><dd>$ {{ totales.cobrado|floatformat:"0g" }}</dd></div>

@@ -4,17 +4,10 @@ Las funciones de grupo traen las notas en pocas consultas, sin importar cuántos
 estudiantes haya: un colegio de 500 estudiantes cuesta lo mismo que uno de 50.
 """
 from collections import defaultdict
-from decimal import ROUND_HALF_UP, Decimal
+from decimal import Decimal
 
+from .escala import redondear  # redondea a los decimales que usa el colegio
 from .models import Actividad, Asistencia, Clase, Nota, Recuperacion
-
-UNA_DECIMAL = Decimal("0.1")
-
-
-def redondear(valor):
-    if valor is None:
-        return None
-    return Decimal(valor).quantize(UNA_DECIMAL, rounding=ROUND_HALF_UP)
 
 
 def promedio_ponderado(pares):

@@ -9,7 +9,7 @@
 </div>
 <nav class="pestanas" aria-label="Secciones de la clase">
   <a href="{% url 'clase_notas' clase.pk %}"{% if seccion == "notas" %} aria-current="page"{% endif %}>{% if clase.grupo.grado.descriptivo %}Valoraciones{% else %}Notas{% endif %}</a>
-  {% if not clase.grupo.grado.descriptivo %}<a href="{% url 'clase_recuperaciones' clase.pk %}"{% if seccion == "recuperaciones" %} aria-current="page"{% endif %}>Recuperaciones</a>{% endif %}
+  {% if not clase.grupo.grado.descriptivo and "recuperaciones" in modulos %}<a href="{% url 'clase_recuperaciones' clase.pk %}"{% if seccion == "recuperaciones" %} aria-current="page"{% endif %}>Recuperaciones</a>{% endif %}
   <a href="{% url 'clase_tareas' clase.pk %}"{% if seccion == "tareas" %} aria-current="page"{% endif %}>Tareas</a>
   <a href="{% url 'clase_asistencia' clase.pk %}"{% if seccion == "asistencia" %} aria-current="page"{% endif %}>Asistencia</a>
   <a href="{% url 'clase_estudiantes' clase.pk %}"{% if seccion == "estudiantes" %} aria-current="page"{% endif %}>Estudiantes</a>

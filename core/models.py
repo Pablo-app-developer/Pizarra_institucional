@@ -7,6 +7,23 @@ from django.db import models
 from django.utils import timezone
 
 
+# Módulos opcionales. Lo básico (estudiantes, notas, asistencia, tareas y boletines) siempre está.
+MODULOS = [
+    ("plan", "Plan de estudios y malla", "Asignaturas por grado, logros por periodo y malla curricular."),
+    ("horarios", "Horarios", "Jornada escolar, generación automática y horario de grupos, docentes y familias."),
+    ("recuperaciones", "Recuperaciones", "Notas de recuperación por periodo con tope configurable."),
+    ("observador", "Observador del estudiante", "Anotaciones académicas, de convivencia y reconocimientos."),
+    ("entregas", "Entrega de tareas en línea", "Los estudiantes envían respuesta, enlace o archivo."),
+    ("comunicados", "Comunicados", "Mensajes del colegio a toda la comunidad o a un grupo."),
+    ("avisos", "Avisos a las familias", "Notificaciones por nota baja, falta, tarea, comunicado y pago."),
+    ("pensiones", "Pensiones", "Cobros, pagos, recibos, cartera y estado de cuenta para acudientes."),
+]
+
+
+def todos_los_modulos():
+    return [m[0] for m in MODULOS]
+
+
 class Colegio(models.Model):
     nombre = models.CharField(max_length=160)
     lema = models.CharField(max_length=200, blank=True)
@@ -23,24 +40,31 @@ class Colegio(models.Model):
     nombre_rector = models.CharField("nombre del rector(a)", max_length=120, blank=True)
 
     # Escala de valoración (Decreto 1290 de 2009). Cada colegio define la suya.
-    nota_minima = models.DecimalField("nota mínima", max_digits=3, decimal_places=1, default=Decimal("1.0"))
-    nota_maxima = models.DecimalField("nota máxima", max_digits=3, decimal_places=1, default=Decimal("5.0"))
+    nota_minima = models.DecimalField("nota mínima", max_digits=4, decimal_places=1, default=Decimal("1.0"))
+    nota_maxima = models.DecimalField("nota máxima", max_digits=4, decimal_places=1, default=Decimal("5.0"))
     desde_basico = models.DecimalField(
-        "Básico desde", max_digits=3, decimal_places=1, default=Decimal("3.0"),
+        "Básico desde", max_digits=4, decimal_places=1, default=Decimal("3.0"),
         help_text="Nota mínima para aprobar. Por debajo es desempeño Bajo.",
     )
-    desde_alto = models.DecimalField("Alto desde", max_digits=3, decimal_places=1, default=Decimal("4.0"))
-    desde_superior = models.DecimalField("Superior desde", max_digits=3, decimal_places=1, default=Decimal("4.6"))
+    desde_alto = models.DecimalField("Alto desde", max_digits=4, decimal_places=1, default=Decimal("4.0"))
+    desde_superior = models.DecimalField("Superior desde", max_digits=4, decimal_places=1, default=Decimal("4.6"))
     tope_recuperacion = models.DecimalField(
-        "nota máxima por recuperación", max_digits=3, decimal_places=1, null=True, blank=True,
+        "nota máxima por recuperación", max_digits=4, decimal_places=1, null=True, blank=True,
         default=Decimal("3.0"),
         help_text="Quien recupera queda, como máximo, con esta nota en el periodo. Vacío: sin tope.",
+    )
+    decimales = models.PositiveSmallIntegerField(
+        "decimales de las notas", default=1, choices=[(0, "Sin decimales (85)"), (1, "Un decimal (4,5)")],
     )
     perdidas_para_reprobar = models.PositiveSmallIntegerField(
         "asignaturas perdidas para reprobar el año", default=3,
         help_text="Con este número de asignaturas perdidas al final, el sistema propone reprobar.",
     )
     version_demo = models.PositiveSmallIntegerField(default=0, editable=False)
+    modulos = models.JSONField(
+        "módulos activos", default=todos_los_modulos, blank=True,
+        help_text="Lo que este colegio tiene contratado. Lo que no esté activo no aparece para nadie.",
+    )
 
     # Identidad: el escudo se guarda en la base de datos para que no dependa del disco del servidor.
     escudo = models.BinaryField(null=True, blank=True, editable=False)
@@ -61,10 +85,14 @@ class Colegio(models.Model):
 
     def clean(self):
         orden = [self.nota_minima, self.desde_basico, self.desde_alto, self.desde_superior, self.nota_maxima]
-        if any(a >= b for a, b in zip(orden, orden[1:])):
+        if any(v is None for v in orden):
+            return
+        if any(a >= b for a, b in zip(orden[:-1], orden[1:-1])) or self.desde_superior > self.nota_maxima:
             raise ValidationError(
-                "La escala debe ir en orden: nota mínima < Básico < Alto < Superior < nota máxima."
+                "La escala debe ir en orden: nota mínima < Básico < Alto < Superior ≤ nota máxima."
             )
+        if self.tope_recuperacion is not None and not (self.nota_minima <= self.tope_recuperacion <= self.nota_maxima):
+            raise ValidationError("La nota máxima por recuperación debe estar dentro de la escala.")
 
     def desempeno(self, nota):
         """Devuelve (clave, etiqueta) del desempeño para una nota, o None."""
@@ -81,6 +109,14 @@ class Colegio(models.Model):
     @property
     def anio_activo(self):
         return self.anios.filter(activo=True).first()
+
+    def tiene(self, modulo):
+        return modulo in (self.modulos or [])
+
+    @property
+    def cortes(self):
+        """Los límites de la escala, para convertir notas de una escala a otra."""
+        return [self.nota_minima, self.desde_basico, self.desde_alto, self.desde_superior, self.nota_maxima]
 
     @property
     def escudo_data_uri(self):
@@ -107,10 +143,16 @@ class Usuario(AbstractUser):
         RECTOR = "rector", "Rectoría"
         COORDINADOR = "coordinador", "Coordinación"
         SECRETARIA = "secretaria", "Secretaría"
+        ADMINISTRATIVO = "administrativo", "Administrativo"
+        SISTEMAS = "sistemas", "Sistemas"
 
     cargo = models.CharField(
-        max_length=12, choices=Cargo.choices, blank=True,
-        help_text="Solo para directivos. Define a qué secciones tiene acceso.",
+        max_length=14, choices=Cargo.choices, blank=True,
+        help_text="Al elegirlo se marcan los permisos habituales de ese cargo; luego puede ajustarlos.",
+    )
+    permisos = models.JSONField(
+        default=list, blank=True,
+        help_text="Secciones a las que este directivo tiene acceso.",
     )
     recibir_correos = models.BooleanField(
         "recibir avisos por correo", default=True,
@@ -143,17 +185,29 @@ class Usuario(AbstractUser):
     def es_familia(self):
         return self.rol in (self.Rol.ACUDIENTE, self.Rol.ESTUDIANTE)
 
-    # Qué puede hacer cada cargo directivo. Un directivo sin cargo se trata como rectoría.
-    CAPACIDADES = {
-        "rector": {"estudiantes", "academico", "boletines", "comunicados", "pensiones", "configuracion"},
-        "coordinador": {"estudiantes", "academico", "boletines", "comunicados"},
-        "secretaria": {"estudiantes", "boletines", "comunicados", "pensiones"},
+    # Permisos que se pueden dar o quitar a cada directivo, uno por uno.
+    PERMISOS = [
+        ("estudiantes", "Estudiantes y acudientes", "Crear, editar, matricular e importar estudiantes; administrar sus acudientes."),
+        ("docentes", "Docentes", "Crear y editar docentes y restablecer sus contraseñas."),
+        ("academico", "Estructura académica", "Años, periodos, grados, asignaturas, grupos, clases, plan de estudios y horarios."),
+        ("notas", "Notas y observador", "Ver y corregir planillas de cualquier clase, el consolidado y el observador."),
+        ("cierres", "Cierres", "Cerrar y reabrir periodos, y hacer el cierre de año con la promoción."),
+        ("boletines", "Boletines", "Generar los informes en PDF de cualquier grupo."),
+        ("comunicados", "Comunicados", "Publicar y editar comunicados para las familias."),
+        ("pensiones", "Pensiones", "Cobros, pagos, recibos y cartera."),
+        ("configuracion", "Configuración y permisos", "Identidad del colegio, sistema de evaluación, cuentas directivas y sus permisos, y la bitácora."),
+    ]
+    # Lo que trae marcado cada cargo al crearlo.
+    PERMISOS_POR_CARGO = {
+        "rector": [p[0] for p in PERMISOS],
+        "coordinador": ["estudiantes", "docentes", "academico", "notas", "cierres", "boletines", "comunicados"],
+        "secretaria": ["estudiantes", "boletines", "comunicados", "pensiones"],
+        "administrativo": ["estudiantes", "comunicados"],
+        "sistemas": ["estudiantes", "docentes", "academico", "comunicados", "configuracion"],
     }
 
-    def puede(self, capacidad):
-        if not self.es_directivo:
-            return False
-        return capacidad in self.CAPACIDADES.get(self.cargo or "rector", set())
+    def puede(self, permiso):
+        return self.es_directivo and permiso in (self.permisos or [])
 
     @property
     def etiqueta_rol(self):
@@ -426,7 +480,7 @@ class Actividad(models.Model):
 class Nota(models.Model):
     actividad = models.ForeignKey(Actividad, on_delete=models.CASCADE, related_name="notas")
     matricula = models.ForeignKey(Matricula, on_delete=models.CASCADE, related_name="notas")
-    valor = models.DecimalField(max_digits=3, decimal_places=1)
+    valor = models.DecimalField(max_digits=4, decimal_places=1)
     actualizada = models.DateTimeField(auto_now=True)
 
     class Meta:
@@ -653,7 +707,7 @@ class Recuperacion(models.Model):
     matricula = models.ForeignKey(Matricula, on_delete=models.CASCADE, related_name="recuperaciones")
     clase = models.ForeignKey(Clase, on_delete=models.CASCADE, related_name="recuperaciones")
     periodo = models.ForeignKey(Periodo, on_delete=models.CASCADE, related_name="recuperaciones")
-    valor = models.DecimalField(max_digits=3, decimal_places=1)
+    valor = models.DecimalField(max_digits=4, decimal_places=1)
     fecha = models.DateField(default=timezone.localdate)
 
     class Meta:
@@ -731,3 +785,19 @@ class Pago(models.Model):
     class Meta:
         verbose_name = "pago"
         ordering = ["fecha", "id"]
+
+
+# ------------------------------------------------------------------------ Bitácora
+
+
+class Bitacora(models.Model):
+    """Registro de las acciones sensibles: quién hizo qué y cuándo."""
+
+    colegio = models.ForeignKey(Colegio, on_delete=models.CASCADE, related_name="bitacora")
+    usuario = models.ForeignKey(Usuario, on_delete=models.SET_NULL, null=True, related_name="bitacora")
+    accion = models.CharField(max_length=60)
+    detalle = models.CharField(max_length=400, blank=True)
+    fecha = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        ordering = ["-fecha", "-id"]

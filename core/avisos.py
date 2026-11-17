@@ -17,6 +17,13 @@ def destinatarios_de(estudiante_ids):
     return mapa
 
 
+def _avisos_activos(colegio_id):
+    from .models import Colegio
+
+    modulos = Colegio.objects.filter(pk=colegio_id).values_list("modulos", flat=True).first() or []
+    return "avisos" in modulos
+
+
 def _enviar_correos(mensajes):
     try:
         send_mass_mail(mensajes, fail_silently=True)
@@ -26,6 +33,7 @@ def _enviar_correos(mensajes):
 
 def avisar(pares, asunto):
     """pares: lista de (usuario, texto, url). Crea los avisos y envía los correos en segundo plano."""
+    pares = [par for par in pares if par[0].colegio_id and _avisos_activos(par[0].colegio_id)]
     if not pares:
         return 0
     Aviso.objects.bulk_create([Aviso(usuario=u, texto=t[:300], url=url) for u, t, url in pares])

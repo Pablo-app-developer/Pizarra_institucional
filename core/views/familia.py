@@ -11,7 +11,7 @@ from django.shortcuts import get_object_or_404, redirect
 
 from ..forms import EntregaEnLineaForm
 from ..models import Actividad, Asistencia, Entrega, Logro, Nota, Recuperacion, Tarea, ValoracionDescriptiva
-from ..permisos import estudiante_para, estudiantes_de, familia
+from ..permisos import estudiante_para, estudiantes_de, familia, modulo
 from .comunes import comunicados_para, periodo_vigente
 
 
@@ -143,6 +143,7 @@ def asistencia(request, pk):
 
 
 @familia
+@modulo("observador")
 def observaciones(request, pk):
     est, matricula, ctx = _base(request, pk)
     if not matricula:
@@ -172,7 +173,8 @@ def tarea(request, pk, tarea_id):
     )
     entrega = Entrega.objects.filter(tarea=t, matricula=matricula).first()
     # Se puede enviar o corregir el envío mientras el docente no la haya calificado.
-    puede_enviar = t.entrega_en_linea and (entrega is None or entrega.estado == "enviada")
+    en_linea = t.entrega_en_linea and request.user.colegio.tiene("entregas")
+    puede_enviar = en_linea and (entrega is None or entrega.estado == "enviada")
     form = EntregaEnLineaForm(request.POST or None, request.FILES or None) if puede_enviar else None
     if form is not None and request.method == "POST" and form.is_valid():
         datos = form.cleaned_data
@@ -191,7 +193,7 @@ def tarea(request, pk, tarea_id):
     if form is not None and request.method != "POST" and entrega:
         form = EntregaEnLineaForm(initial={"respuesta": entrega.respuesta, "enlace": entrega.enlace})
     ctx.update({
-        "t": t, "entrega": entrega, "form": form, "seccion": "tareas",
+        "t": t, "entrega": entrega, "form": form, "seccion": "tareas", "en_linea": en_linea,
         "tarde": t.fecha_entrega < timezone.localdate(),
     })
     return render(request, "familia/tarea.html", ctx)

@@ -2,7 +2,9 @@
 {% block titulo %}{{ titulo }}{% endblock %}
 {% block contenido %}
 <div class="encabezado"><div><p class="miga"><a href="{{ cancelar }}">{{ conf.plural }}</a> /</p><h1>{{ titulo }}</h1>
-{% if conf.es_usuario and not obj %}<p class="encabezado__sub">El documento será el usuario de ingreso. Al guardar verá una contraseña temporal para entregarle.</p>{% endif %}</div></div>
+{% if conf.es_usuario and not obj %}<p class="encabezado__sub">El documento será el usuario de ingreso. Al guardar verá una contraseña temporal para entregarle.</p>{% endif %}
+{% if entidad == "directivos" %}<p class="encabezado__sub">Al elegir el cargo se marcan sus permisos habituales. Quite o agregue los que necesite: lo que queda marcado es lo que la persona puede hacer.</p>{% endif %}</div></div>
+{% if entidad == "directivos" %}{{ permisos_por_cargo|json_script:"permisos-por-cargo" }}{% endif %}
 <form method="post" class="panel formulario" novalidate><div class="panel__cuerpo">
   {% csrf_token %}
   {% include "base/_form.html" %}

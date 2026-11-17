@@ -3,6 +3,8 @@ from django.utils.formats import number_format
 from django.utils.html import format_html
 from django.utils.safestring import mark_safe
 
+from ..escala import decimales
+
 register = template.Library()
 
 ICONOS = {
@@ -39,7 +41,7 @@ def nota(valor):
     """4.5 -> «4,5»; None -> raya."""
     if valor is None or valor == "":
         return "—"
-    return number_format(valor, decimal_pos=1)
+    return number_format(valor, decimal_pos=decimales())
 
 
 @register.simple_tag(takes_context=True)
@@ -51,10 +53,10 @@ def desempeno(context, valor, con_texto=True):
     clave, etiqueta = colegio.desempeno(valor)
     if con_texto:
         return format_html(
-            '<span class="nota nota--{}"><b>{}</b> {}</span>', clave, number_format(valor, decimal_pos=1), etiqueta
+            '<span class="nota nota--{}"><b>{}</b> {}</span>', clave, number_format(valor, decimal_pos=decimales()), etiqueta
         )
     return format_html(
-        '<span class="nota nota--{}" title="{}"><b>{}</b></span>', clave, etiqueta, number_format(valor, decimal_pos=1)
+        '<span class="nota nota--{}" title="{}"><b>{}</b></span>', clave, etiqueta, number_format(valor, decimal_pos=decimales())
     )
 
 
@@ -67,5 +69,20 @@ def clave(diccionario, llave):
 
 
 @register.filter
+def es_lista_casillas(campo):
+    return campo.field.widget.__class__.__name__ == "CheckboxSelectMultiple"
+
+
+@register.filter
 def es_casilla(campo):
     return campo.field.widget.__class__.__name__ == "CheckboxInput"
+
+
+@register.filter
+def valor_casilla(valor):
+    """Lo que se muestra dentro de una casilla de nota: con coma decimal y sin ceros sobrantes en escalas enteras."""
+    if valor is None or valor == "":
+        return ""
+    if isinstance(valor, str):
+        return valor  # lo que digitó el docente, cuando hubo error
+    return number_format(valor, decimal_pos=decimales())

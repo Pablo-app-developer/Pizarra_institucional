@@ -27,7 +27,7 @@ class Command(BaseCommand):
         clave = clave_temporal(10)
         u = Usuario(username=o["documento"], documento=o["documento"], first_name=o["nombres"],
                     last_name=o["apellidos"], email=o["correo"], rol="directivo", colegio=colegio,
-                    debe_cambiar_clave=True)
+                    cargo="rector", permisos=Usuario.PERMISOS_POR_CARGO["rector"], debe_cambiar_clave=True)
         u.set_password(clave)
         u.save()
         self.stdout.write(self.style.SUCCESS(f"Colegio creado: {colegio.nombre}"))

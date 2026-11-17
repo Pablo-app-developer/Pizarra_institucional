@@ -8,8 +8,8 @@
 {% if t.descripcion %}<p style="margin-top:14px;max-width:70ch;white-space:pre-line">{{ t.descripcion }}</p>{% endif %}
 {% if t.enlace %}<p style="margin-top:10px"><a href="{{ t.enlace }}" target="_blank" rel="noopener noreferrer">Abrir material de apoyo</a></p>{% endif %}
 {% if entrega.comentario %}<p class="aviso aviso--info" style="margin:14px 0 0"><strong>Comentario del docente:</strong> {{ entrega.comentario }}</p>{% endif %}
-{% if not t.entrega_en_linea %}<p class="campo__ayuda" style="margin-top:14px">Esta tarea se entrega en clase. El docente registra aquí si fue entregada.</p>{% endif %}</div></section>
-{% if t.entrega_en_linea %}<section class="panel"><div class="panel__cabeza"><h2>{% if entrega.enviada %}Lo que se envió{% else %}Enviar la tarea{% endif %}</h2></div><div class="panel__cuerpo">
+{% if not en_linea %}<p class="campo__ayuda" style="margin-top:14px">Esta tarea se entrega en clase. El docente registra aquí si fue entregada.</p>{% endif %}</div></section>
+{% if en_linea %}<section class="panel"><div class="panel__cabeza"><h2>{% if entrega.enviada %}Lo que se envió{% else %}Enviar la tarea{% endif %}</h2></div><div class="panel__cuerpo">
 {% if entrega.enviada %}<p class="pequeno secundario">Enviada el {{ entrega.enviada|date:"j \d\e F, g:i a"|lower }}.</p>
 {% if entrega.archivo %}<p style="margin:6px 0"><a href="{% url 'archivo_entrega' entrega.pk %}">Descargar el archivo enviado</a></p>{% endif %}
 {% if not form %}{% if entrega.respuesta %}<p style="white-space:pre-line;margin-top:8px">{{ entrega.respuesta }}</p>{% endif %}{% if entrega.enlace %}<p style="margin-top:8px"><a href="{{ entrega.enlace }}" target="_blank" rel="noopener noreferrer">Abrir el enlace enviado</a></p>{% endif %}{% endif %}{% endif %}

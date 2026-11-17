@@ -6,6 +6,7 @@ from django.core.exceptions import PermissionDenied
 from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect
 
+from .escala import usar_decimales
 from .models import Clase, Colegio, Estudiante, Grupo
 
 
@@ -23,6 +24,21 @@ def rol_requerido(*roles):
                 raise PermissionDenied("No tiene permiso para ver esta página.")
             # El escudo (binario) no se carga en cada página: solo cuando un informe lo pide.
             usuario.colegio = Colegio.objects.defer("escudo").get(pk=usuario.colegio_id)
+            usar_decimales(usuario.colegio.decimales)
+            return vista(request, *args, **kwargs)
+
+        return envoltura
+
+    return decorador
+
+
+def modulo(nombre):
+    """La vista solo existe si el colegio tiene activo ese módulo. Va debajo del decorador de acceso."""
+    def decorador(vista):
+        @wraps(vista)
+        def envoltura(request, *args, **kwargs):
+            if not request.user.colegio.tiene(nombre):
+                raise Http404("Este módulo no está activo para su colegio.")
             return vista(request, *args, **kwargs)
 
         return envoltura
@@ -34,13 +50,13 @@ directivo = rol_requerido("directivo")
 
 
 def capacidad(*capacidades):
-    """Directivo cuyo cargo tiene al menos una de las capacidades indicadas."""
+    """Directivo que tiene al menos uno de los permisos indicados."""
     def decorador(vista):
         @wraps(vista)
         @directivo
         def envoltura(request, *args, **kwargs):
             if not any(request.user.puede(c) for c in capacidades):
-                raise PermissionDenied("Su cargo no tiene acceso a esta sección.")
+                raise PermissionDenied("Su cuenta no tiene permiso para esta sección. Pídalo a rectoría o a sistemas.")
             return vista(request, *args, **kwargs)
 
         return envoltura
@@ -59,7 +75,7 @@ def clase_para(usuario, pk):
         Clase.objects.select_related("grupo__grado", "grupo__anio", "asignatura", "docente"),
         pk=pk, grupo__anio__colegio=usuario.colegio,
     )
-    if usuario.puede("academico") or (usuario.es_docente and clase.docente_id == usuario.id):
+    if usuario.puede("notas") or (usuario.es_docente and clase.docente_id == usuario.id):
         return clase
     raise PermissionDenied("Esta clase está asignada a otro docente.")
 
@@ -68,7 +84,7 @@ def grupo_para(usuario, pk):
     grupo = get_object_or_404(
         Grupo.objects.select_related("grado", "anio", "director"), pk=pk, anio__colegio=usuario.colegio
     )
-    if usuario.puede("academico") or (usuario.es_docente and grupo.director_id == usuario.id):
+    if usuario.puede("notas") or (usuario.es_docente and grupo.director_id == usuario.id):
         return grupo
     raise PermissionDenied("Usted no dirige este grupo.")
 
@@ -93,6 +109,6 @@ def estudiante_para(usuario, pk):
 def docente_conoce(usuario, matricula):
     """Un docente solo ve estudiantes de grupos donde dicta clase o que dirige."""
     if usuario.es_directivo:
-        return usuario.puede("academico")
+        return usuario.puede("notas")
     grupo = matricula.grupo
     return grupo.director_id == usuario.id or grupo.clases.filter(docente=usuario).exists()

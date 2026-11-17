@@ -1,0 +1,11 @@
+{% extends "base/base.html" %}
+{% block titulo %}Bitácora{% endblock %}
+{% block contenido %}
+<div class="encabezado"><div><p class="miga"><a href="{% url 'configuracion' %}">Configuración</a> /</p><h1>Bitácora de cambios</h1>
+<p class="encabezado__sub">Quién hizo cada cambio sensible y cuándo: permisos, cierres de periodo, sistema de evaluación, contraseñas, pagos anulados y eliminaciones.</p></div></div>
+<div class="tabla-envoltura">{% if pagina.object_list %}<table><thead><tr><th>Fecha</th><th>Quién</th><th>Acción</th><th>Detalle</th></tr></thead>
+<tbody>{% for b in pagina %}<tr><td style="white-space:nowrap">{{ b.fecha|date:"j \d\e F, g:i a"|lower }}</td><td>{{ b.usuario.nombre_completo|default:"Cuenta eliminada" }}</td><td><strong>{{ b.accion }}</strong></td><td>{{ b.detalle }}</td></tr>{% endfor %}</tbody></table>
+{% else %}<p class="vacio">Aún no hay cambios registrados.</p>{% endif %}</div>
+{% if pagina.paginator.num_pages > 1 %}<div class="paginacion"><span>Página {{ pagina.number }} de {{ pagina.paginator.num_pages }}</span>
+<span>{% if pagina.has_previous %}<a href="?pagina={{ pagina.previous_page_number }}">Anterior</a>{% endif %}{% if pagina.has_next %}&nbsp;&nbsp;<a href="?pagina={{ pagina.next_page_number }}">Siguiente</a>{% endif %}</span></div>{% endif %}
+{% endblock %}

@@ -7,11 +7,12 @@
   {% if user.es_directivo and "estudiantes" in capacidades %}<div class="encabezado__acciones"><a class="boton boton--secundario" href="{% url 'importar' %}">Importar desde Excel</a>
   <a class="boton" href="{% url 'gestion_nuevo' 'estudiantes' %}">Nuevo estudiante</a></div>{% endif %}
 </div>
-{% if not anio %}
-<div class="panel vacio"><p><strong>Para empezar, cree el año lectivo y sus periodos.</strong></p>
-<p>Luego registre grados, asignaturas, grupos y docentes. Con eso ya puede matricular estudiantes.</p>
-<p><a class="boton" href="{% url 'configuracion' %}">Ir a configuración</a></p></div>
-{% else %}
+{% if pasos_pendientes %}<section class="panel pasos"><div class="panel__cabeza"><div><h2>Puesta en marcha</h2>
+<p class="pequeno secundario">Faltan {{ pasos_pendientes }} paso{{ pasos_pendientes|pluralize }} para que docentes y familias puedan empezar a usar la plataforma.</p></div>
+{% if "academico" in capacidades %}<form method="post" action="{% url 'estructura_tipica' %}" data-confirmar="Se creará lo que aún no exista: año, cuatro periodos, grados de Prejardín a Once, asignaturas de las áreas obligatorias, plan de estudios sugerido y jornada. Todo se puede editar después. ¿Crear?">{% csrf_token %}<button class="boton boton--secundario" type="submit">Crear la estructura típica</button></form>{% endif %}</div>
+<ol class="lista pasos__lista">{% for p in pasos %}<li class="{% if p.hecho %}hecho{% endif %}"><div class="lista__fila"><span>{% if p.hecho %}<span class="estado estado--bien">Listo</span>{% elif p.opcional %}<span class="estado">Opcional</span>{% else %}<span class="estado estado--aviso">Pendiente</span>{% endif %} {{ p.texto }}</span>
+{% if p.puede and not p.hecho %}<a href="{{ p.url }}">Hacerlo ahora</a>{% endif %}</div></li>{% endfor %}</ol></section>{% endif %}
+{% if anio %}
 <dl class="cifras">
   <div class="cifra"><dt>Estudiantes matriculados</dt><dd>{{ n_estudiantes }}</dd></div>
   <div class="cifra"><dt>Grupos</dt><dd>{{ n_grupos }}</dd></div>
@@ -24,13 +25,13 @@
   <section class="panel">
     <div class="panel__cabeza"><h2>Grupos</h2>{% if "academico" in capacidades %}<a href="{% url 'grupos' %}">Administrar grupos y clases</a>{% endif %}</div>
     <div class="tabla-envoltura"><table>
-      <thead><tr><th>Grupo</th><th>Director(a)</th><th class="num">Estudiantes</th>{% if "academico" in capacidades %}<th class="num">Pierden 2 o más asignaturas</th><th></th>{% endif %}</tr></thead>
+      <thead><tr><th>Grupo</th><th>Director(a)</th><th class="num">Estudiantes</th>{% if "notas" in capacidades %}<th class="num">Pierden 2 o más asignaturas</th><th></th>{% endif %}</tr></thead>
       <tbody>{% for g in grupos %}<tr>
         <th scope="row"><strong>{{ g.grupo.nombre_largo }}</strong></th>
         <td>{{ g.grupo.director.nombre_completo|default:"Sin asignar" }}</td>
         <td class="num">{{ g.estudiantes }}</td>
-        {% if "academico" in capacidades %}<td class="num">{% if g.en_riesgo %}<span class="estado estado--mal">{{ g.en_riesgo }}</span>{% else %}0{% endif %}</td>
-        <td class="num"><a href="{% url 'consolidado' %}?grupo={{ g.grupo.pk }}">Ver notas</a></td>{% endif %}
+        {% if "notas" in capacidades %}<td class="num">{% if g.grupo.grado.descriptivo %}<span class="secundario">Descriptivo</span>{% elif g.en_riesgo %}<span class="estado estado--mal">{{ g.en_riesgo }}</span>{% else %}0{% endif %}</td>
+        <td class="num">{% if not g.grupo.grado.descriptivo %}<a href="{% url 'consolidado' %}?grupo={{ g.grupo.pk }}">Ver notas</a>{% endif %}</td>{% endif %}
       </tr>{% empty %}<tr><td colspan="5" class="vacio">Aún no hay grupos en este año.</td></tr>{% endfor %}</tbody>
     </table></div>
   </section>
@@ -39,11 +40,11 @@
       <div class="panel__cabeza"><h2>Clases sin notas en {{ periodo.nombre|lower }}</h2></div>
       <ul class="lista">{% for c in sin_notas %}<li><div class="lista__titulo">{{ c.asignatura }}, {{ c.grupo }}</div><div class="lista__meta">{{ c.docente.nombre_completo }}</div></li>{% endfor %}</ul>
     </section>{% endif %}
-    <section class="panel">
-      <div class="panel__cabeza"><h2>Últimos comunicados</h2><a href="{% url 'gestion_nuevo' 'comunicados' %}">Publicar</a></div>
+    {% if "comunicados" in modulos %}<section class="panel">
+      <div class="panel__cabeza"><h2>Últimos comunicados</h2>{% if "comunicados" in capacidades %}<a href="{% url 'gestion_nuevo' 'comunicados' %}">Publicar</a>{% endif %}</div>
       <ul class="lista">{% for c in comunicados %}<li><div class="lista__titulo">{{ c.titulo }}</div><div class="lista__meta">{{ c.publicado|date:"j \d\e F"|lower }}, {% if c.grupo %}{{ c.grupo }}{% else %}todo el colegio{% endif %}</div></li>
       {% empty %}<li class="secundario">No hay comunicados publicados.</li>{% endfor %}</ul>
-    </section>
+    </section>{% endif %}
   </div>
 </div>
 {% endif %}

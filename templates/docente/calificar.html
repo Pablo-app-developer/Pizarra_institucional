@@ -1,0 +1,23 @@
+{% extends "docente/_clase.html" %}{% load pizarra l10n %}
+{% block clase %}
+<p class="miga"><a href="{% url 'clase_notas' clase.pk %}?periodo={{ periodo.pk }}">Planilla de {{ periodo.nombre|lower }}</a> /</p>
+<div class="encabezado" style="margin-bottom:14px"><div><h2>{{ actividad.titulo }}</h2>
+<p class="encabezado__sub">{{ actividad.get_tipo_display }}, {{ actividad.fecha|date:"j \d\e F"|lower }}{% if actividad.peso %}, vale {{ actividad.peso|floatformat:"-2" }} %{% endif %}. {{ calificados }} de {{ filas|length }} calificados.</p></div></div>
+{% if periodo.cerrado %}<p class="aviso aviso--info">El periodo está cerrado: estas notas ya no se pueden cambiar.</p>{% endif %}
+<form method="post" novalidate>{% csrf_token %}
+{% if not periodo.cerrado %}<div class="llenar-vacias"><label for="llenar">Poner la misma nota a quienes no tienen</label>
+  <input type="text" id="llenar" inputmode="decimal" maxlength="5" autocomplete="off" placeholder="{{ colegio.desde_alto|valor_casilla }}">
+  <button type="button" class="boton boton--secundario boton--chico" data-llenar-vacias>Llenar vacías</button></div>{% endif %}
+<ul class="calificar" data-planilla data-min="{{ colegio.nota_minima|unlocalize }}" data-max="{{ colegio.nota_maxima|unlocalize }}"
+    data-basico="{{ colegio.desde_basico|unlocalize }}" data-alto="{{ colegio.desde_alto|unlocalize }}" data-superior="{{ colegio.desde_superior|unlocalize }}"
+    data-decimales="{{ decimales }}" data-borrador-clave="calificar-{{ actividad.pk }}">
+{% for f in filas %}<li class="calificar__fila"><label for="c{{ forloop.counter }}">{{ f.matricula.estudiante }}</label>
+  <input type="text" id="c{{ forloop.counter }}" inputmode="decimal" name="{{ f.nombre }}" value="{{ f.valor|valor_casilla }}" maxlength="5" autocomplete="off"{% if forloop.first %} autofocus{% endif %}
+  {% if f.error %} class="invalida" aria-invalid="true" title="{{ f.error }}"{% endif %}{% if periodo.cerrado %} disabled{% endif %}>
+  {% if f.error %}<span class="campo__error">{{ f.error }}</span>{% endif %}</li>{% endfor %}
+</ul>
+{% if not periodo.cerrado %}<div class="barra-guardar"><span data-estado-planilla class="estado-planilla pequeno" aria-live="polite"></span>
+<span class="acciones-fila">{% if hay_siguiente %}<button class="boton boton--secundario" type="submit" name="y_siguiente" value="1">Guardar y seguir con la siguiente</button>{% endif %}
+<button class="boton" type="submit">Guardar notas</button></span></div>{% endif %}
+</form>
+{% endblock %}

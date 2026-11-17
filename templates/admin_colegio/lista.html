@@ -4,7 +4,7 @@
 <div class="encabezado">
   <div>{% if conf.volver == "configuracion" %}<p class="miga"><a href="{% url 'configuracion' %}">Configuración</a> /</p>{% endif %}<h1>{{ conf.plural }}</h1></div>
   <div class="encabezado__acciones">
-    {% if entidad == "estudiantes" %}<a class="boton boton--secundario" href="{% url 'importar' %}">Importar desde Excel</a>{% endif %}
+    {% if entidad == "estudiantes" %}<a class="boton boton--secundario" href="{% url 'exportar_estudiantes' %}">Descargar en Excel</a><a class="boton boton--secundario" href="{% url 'importar' %}">Importar desde Excel</a>{% endif %}
     <a class="boton" href="{% url 'gestion_nuevo' entidad %}">{{ conf.nuevo }}</a>
   </div>
 </div>
