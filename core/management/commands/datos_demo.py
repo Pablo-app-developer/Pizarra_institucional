@@ -9,6 +9,7 @@ import random
 from datetime import date, timedelta
 from decimal import Decimal
 
+from django.contrib.auth.hashers import make_password
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 from django.utils import timezone
@@ -153,11 +154,15 @@ class Command(BaseCommand):
             escudo=escudo_de_ejemplo(), escudo_tipo="image/png", escudo_version=1,
         )
 
+        # Todas las cuentas de ejemplo comparten contraseña: se cifra una sola vez. Cifrarla para cada cuenta
+        # tomaba casi todo el tiempo de carga, y en un servidor pequeño eso son minutos sin responder.
+        clave_cifrada = make_password(CLAVE)
+
         def usuario(doc, nombres, apellidos, rol, **extra):
             if "cargo" in extra and "permisos" not in extra:
                 extra["permisos"] = Usuario.PERMISOS_POR_CARGO[extra["cargo"]]
-            u = Usuario(username=doc, documento=doc, first_name=nombres, last_name=apellidos, rol=rol, colegio=col, **extra)
-            u.set_password(CLAVE)
+            u = Usuario(username=doc, documento=doc, first_name=nombres, last_name=apellidos, rol=rol, colegio=col,
+                        password=clave_cifrada, **extra)
             u.save()
             return u
 
