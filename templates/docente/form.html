@@ -1,0 +1,11 @@
+{% extends "docente/_clase.html" %}
+{% block clase %}
+<h2 style="margin-bottom:14px">{{ titulo }}</h2>
+<form method="post" class="panel formulario" novalidate><div class="panel__cuerpo">
+  {% csrf_token %}{% if periodo %}<input type="hidden" name="periodo" value="{{ periodo.pk }}">{% endif %}
+  {% include "base/_form.html" %}
+  <div class="formulario__pie"><button class="boton" type="submit">Guardar</button><a href="{{ cancelar }}">Cancelar</a></div>
+</div></form>
+{% if eliminar %}<form method="post" action="{{ eliminar }}" data-confirmar="¿Eliminar «{{ obj }}»? {{ aviso_eliminar }}" style="margin-top:18px">{% csrf_token %}
+  <button class="boton boton--peligro" type="submit">Eliminar</button> <span class="campo__ayuda">{{ aviso_eliminar }}</span></form>{% endif %}
+{% endblock %}

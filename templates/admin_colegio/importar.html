@@ -1,0 +1,24 @@
+{% extends "base/base.html" %}
+{% block titulo %}Importar estudiantes{% endblock %}
+{% block contenido %}
+<div class="encabezado"><div><p class="miga"><a href="{% url 'gestion_lista' 'estudiantes' %}">Estudiantes</a> /</p><h1>Importar estudiantes desde Excel</h1>
+<p class="encabezado__sub">Carga estudiantes, los matricula en su grupo y crea la cuenta de cada acudiente.</p></div>
+<div class="encabezado__acciones no-imprimir"><a class="boton boton--secundario" href="{% url 'plantilla_importacion' %}">Descargar plantilla</a></div></div>
+{% if resultado %}
+  <div class="mensaje{% if resultado.errores and not resultado.creados and not resultado.actualizados %} mensaje--error{% endif %}" role="status">
+    {{ resultado.creados }} estudiante{{ resultado.creados|pluralize }} nuevo{{ resultado.creados|pluralize }}, {{ resultado.actualizados }} actualizado{{ resultado.actualizados|pluralize }}, {{ resultado.errores|length }} fila{{ resultado.errores|pluralize }} con error.</div>
+  {% if resultado.errores %}<section class="panel"><div class="panel__cabeza"><h2>Filas que no se cargaron</h2></div>
+    <div class="tabla-envoltura"><table><thead><tr><th>Fila de Excel</th><th>Motivo</th></tr></thead>
+    <tbody>{% for n, motivo in resultado.errores %}<tr><td>{{ n|default:"Archivo" }}</td><td>{{ motivo }}</td></tr>{% endfor %}</tbody></table></div></section>{% endif %}
+  {% if resultado.cuentas %}<section class="panel"><div class="panel__cabeza"><div><h2>Cuentas de acudientes creadas</h2>
+    <p class="pequeno secundario">Estas contraseñas temporales solo se muestran ahora. Imprima esta página o cópielas antes de salir.</p></div>
+    <button class="boton boton--secundario no-imprimir" type="button" onclick="window.print()">Imprimir</button></div>
+    <div class="tabla-envoltura"><table class="credenciales"><thead><tr><th>Acudiente</th><th>Usuario</th><th>Contraseña temporal</th><th>Estudiante</th></tr></thead>
+    <tbody>{% for c in resultado.cuentas %}<tr><td>{{ c.nombre }}</td><td>{{ c.usuario }}</td><td>{{ c.clave }}</td><td>{{ c.estudiante }}</td></tr>{% endfor %}</tbody></table></div></section>{% endif %}
+{% endif %}
+<form method="post" enctype="multipart/form-data" class="panel formulario no-imprimir"><div class="panel__cuerpo">
+  {% csrf_token %}{% include "base/_form.html" %}
+  <p class="campo__ayuda" style="margin-bottom:16px">Columnas obligatorias: documento, nombres y apellidos. El grupo se escribe como aparece en el sistema (por ejemplo 6°A). Si un documento ya existe, se actualizan sus datos en lugar de duplicarlo.</p>
+  <button class="boton" type="submit">Importar archivo</button>
+</div></form>
+{% endblock %}

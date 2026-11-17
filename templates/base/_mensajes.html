@@ -1,0 +1,5 @@
+{% if messages %}
+<ul class="mensajes" role="status">
+  {% for m in messages %}<li class="mensaje{% if m.tags == 'error' %} mensaje--error{% endif %}">{{ m }}</li>{% endfor %}
+</ul>
+{% endif %}

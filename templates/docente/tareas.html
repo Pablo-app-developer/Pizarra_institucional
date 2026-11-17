@@ -1,0 +1,14 @@
+{% extends "docente/_clase.html" %}
+{% block acciones %}<a class="boton" href="{% url 'tarea_nueva' clase.pk %}">Nueva tarea</a>{% endblock %}
+{% block clase %}
+{% if tareas %}<div class="tabla-envoltura"><table>
+  <thead><tr><th>Tarea</th><th>Se entrega</th><th>Entregaron</th><th></th></tr></thead>
+  <tbody>{% for t in tareas %}<tr class="fila-enlace">
+    <th scope="row"><a href="{% url 'tarea_editar' clase.pk t.pk %}">{{ t.titulo }}</a><div class="lista__meta">Asignada el {{ t.fecha_asignacion|date:"j \d\e F"|lower }}</div></th>
+    <td>{{ t.fecha_entrega|date:"D j \d\e F"|lower|capfirst }} {% if t.fecha_entrega >= hoy %}<span class="estado estado--info">En curso</span>{% endif %}</td>
+    <td>{% if t.revisadas %}{{ t.entregadas }} de {{ n }}{% elif t.fecha_entrega < hoy %}<span class="estado estado--aviso">Sin revisar</span>{% else %}<span class="secundario">Aún no vence</span>{% endif %}</td>
+    <td class="num"><a href="{% url 'tarea_entregas' clase.pk t.pk %}" style="font-weight:400;text-decoration:underline">Registrar entregas</a></td>
+  </tr>{% endfor %}</tbody></table></div>
+{% else %}<div class="panel vacio"><p><strong>No ha dejado tareas en esta clase.</strong></p><p>Al crear una, las familias la ven de inmediato con su fecha de entrega.</p>
+<p><a class="boton" href="{% url 'tarea_nueva' clase.pk %}">Nueva tarea</a></p></div>{% endif %}
+{% endblock %}

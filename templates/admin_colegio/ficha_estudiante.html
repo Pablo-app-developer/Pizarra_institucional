@@ -1,0 +1,38 @@
+{% extends "base/base.html" %}{% load pizarra %}
+{% block titulo %}{{ est.nombre_natural }}{% endblock %}
+{% block contenido %}
+<div class="encabezado">
+  <div><p class="miga"><a href="{% url 'gestion_lista' 'estudiantes' %}">Estudiantes</a> /</p>
+  <div class="persona"><span class="avatar">{{ est.iniciales }}</span><div><h1>{{ est.nombre_natural }}</h1>
+  <p class="encabezado__sub">{{ est.get_tipo_documento_display }} {{ est.documento }}{% if matricula %}, {{ matricula.grupo.nombre_largo }}{% else %}, sin matrícula este año{% endif %}{% if not est.activo %} <span class="estado estado--mal">Retirado</span>{% endif %}</p></div></div></div>
+  <div class="encabezado__acciones">{% if matricula %}<a class="boton boton--secundario" href="{% url 'observador' matricula.pk %}">Observador</a>{% endif %}
+  <a class="boton" href="{% url 'gestion_editar' 'estudiantes' est.pk %}">Editar datos y grupo</a></div>
+</div>
+<div class="rejilla rejilla--2">
+  <div class="apilado">
+    {% if matricula %}<section class="panel"><div class="panel__cabeza"><h2>Notas del año</h2>
+      {% if asistencia.total %}<span class="secundario pequeno">Asistencia {{ asistencia.porcentaje }} %</span>{% endif %}</div>
+      {% include "base/_resumen_notas.html" %}</section>
+    <section class="panel"><div class="panel__cabeza"><h2>Observador</h2><a href="{% url 'observador' matricula.pk %}">Agregar observación</a></div>
+      {% include "base/_observaciones.html" %}</section>
+    {% else %}<div class="panel vacio"><p>Este estudiante no está matriculado en el año activo.</p><p><a class="boton" href="{% url 'gestion_editar' 'estudiantes' est.pk %}">Asignar grupo</a></p></div>{% endif %}
+  </div>
+  <section class="panel">
+    <div class="panel__cabeza"><h2>Acudientes</h2></div>
+    <ul class="lista">{% for a in acudiencias %}<li>
+      <div class="lista__titulo">{{ a.acudiente.nombre_completo }}</div>
+      <div class="lista__meta">{{ a.get_parentesco_display }}. Documento {{ a.acudiente.documento }}{% if a.acudiente.telefono %}. Tel. {{ a.acudiente.telefono }}{% endif %}</div>
+      <div class="acciones-fila" style="justify-content:flex-start;margin-top:6px">
+        <form method="post" action="{% url 'restablecer_clave' a.acudiente.pk %}" data-confirmar="Se generará una contraseña temporal nueva para {{ a.acudiente.nombre_completo }}.">{% csrf_token %}<input type="hidden" name="volver" value="{{ request.path }}"><button class="enlace-boton" type="submit">Nueva contraseña</button></form>
+        <form method="post" action="{% url 'desvincular_acudiente' a.pk %}" data-confirmar="¿Retirar a {{ a.acudiente.nombre_completo }} como acudiente de {{ est.nombres }}?">{% csrf_token %}<button class="enlace-boton enlace-boton--peligro" type="submit">Retirar</button></form>
+      </div></li>
+    {% empty %}<li class="secundario">Sin acudientes. Nadie en casa puede consultar la información de este estudiante todavía.</li>{% endfor %}</ul>
+    <form method="post" class="panel__cuerpo" style="border-top:1px solid var(--linea-suave)" novalidate>
+      {% csrf_token %}<h3 style="margin-bottom:4px">Agregar acudiente</h3>
+      <p class="campo__ayuda" style="margin-bottom:14px">Si el documento ya tiene cuenta (por ejemplo, por un hermano), solo se vincula. Si no, se crea con los datos que escriba.</p>
+      {% include "base/_form.html" with form=vincular %}
+      <button class="boton" type="submit">Agregar acudiente</button>
+    </form>
+  </section>
+</div>
+{% endblock %}

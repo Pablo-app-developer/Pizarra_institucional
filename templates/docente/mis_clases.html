@@ -1,0 +1,25 @@
+{% extends "base/base.html" %}
+{% block titulo %}Mis clases{% endblock %}
+{% block contenido %}
+<div class="encabezado"><div><h1>Mis clases</h1><p class="encabezado__sub">{{ hoy|date:"l j \d\e F"|lower|capfirst }}</p></div></div>
+{% if clases %}<div class="clases">{% for c in clases %}
+  <article class="clase">
+    <h3>{{ c.asignatura }}</h3>
+    <p class="clase__grupo">{{ c.grupo.nombre_largo }}, {{ c.n }} estudiante{{ c.n|pluralize }}</p>
+    <p class="pequeno">{% if c.asistencia_hoy %}<span class="estado estado--bien">Asistencia de hoy tomada</span>{% else %}<span class="estado">Asistencia de hoy sin tomar</span>{% endif %}
+    {% if c.tareas_abiertas %} <span class="estado estado--info">{{ c.tareas_abiertas }} tarea{{ c.tareas_abiertas|pluralize }} en curso</span>{% endif %}</p>
+    <div class="clase__enlaces">
+      <a class="boton boton--chico" href="{% url 'clase_notas' c.pk %}">Notas</a>
+      <a class="boton boton--secundario boton--chico" href="{% url 'clase_asistencia' c.pk %}">Asistencia</a>
+      <a class="boton boton--secundario boton--chico" href="{% url 'clase_tareas' c.pk %}">Tareas</a>
+    </div>
+  </article>{% endfor %}</div>
+{% else %}<div class="panel vacio"><p>No tiene clases asignadas en el año activo.</p><p>Coordinación las asigna desde Grupos y clases.</p></div>{% endif %}
+<div class="rejilla rejilla--mitades" style="margin-top:20px">
+{% if dirigidos %}<section class="panel"><div class="panel__cabeza"><h2>Dirección de grupo</h2></div>
+  <ul class="lista">{% for g in dirigidos %}<li><div class="lista__fila"><span class="lista__titulo">{{ g.nombre_largo }}</span><a href="{% url 'direccion_grupo' g.pk %}">Rendimiento y observaciones de boletín</a></div></li>{% endfor %}</ul></section>{% endif %}
+{% if por_revisar %}<section class="panel"><div class="panel__cabeza"><h2>Tareas vencidas sin revisar</h2></div>
+  <ul class="lista">{% for t in por_revisar %}<li><div class="lista__fila"><div><div class="lista__titulo">{{ t.titulo }}</div><div class="lista__meta">{{ t.clase.asignatura }} {{ t.clase.grupo }}, se entregaba el {{ t.fecha_entrega|date:"j \d\e F"|lower }}</div></div>
+  <a href="{% url 'tarea_entregas' t.clase.pk t.pk %}">Registrar entregas</a></div></li>{% endfor %}</ul></section>{% endif %}
+</div>
+{% endblock %}

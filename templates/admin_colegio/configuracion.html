@@ -1,0 +1,25 @@
+{% extends "base/base.html" %}
+{% block titulo %}Configuración{% endblock %}
+{% block contenido %}
+<div class="encabezado"><div><h1>Configuración</h1><p class="encabezado__sub">Datos del colegio, escala de valoración y estructura académica.</p></div></div>
+<div class="rejilla rejilla--mitades">
+  <form method="post" class="panel" novalidate><div class="panel__cabeza"><h2>Datos del colegio y escala</h2></div><div class="panel__cuerpo">
+    {% csrf_token %}{% include "base/_form.html" %}
+    <button class="boton" type="submit">Guardar datos del colegio</button>
+  </div></form>
+  <div class="apilado">
+    <section class="panel"><div class="panel__cabeza"><h2>Periodos del año activo</h2><a href="{% url 'gestion_lista' 'periodos' %}">Administrar</a></div>
+      <ul class="lista">{% for p in periodos %}<li><div class="lista__fila"><div><div class="lista__titulo">{{ p.nombre }} <span class="estado {% if p.cerrado %}estado--mal{% else %}estado--bien{% endif %}">{% if p.cerrado %}Cerrado{% else %}Abierto{% endif %}</span></div>
+        <div class="lista__meta">{{ p.fecha_inicio|date:"j M"|lower }} a {{ p.fecha_fin|date:"j M Y"|lower }}, vale {{ p.peso|floatformat:"-2" }} %</div></div>
+        <form method="post" action="{% url 'alternar_periodo' p.pk %}" {% if not p.cerrado %}data-confirmar="Al cerrar {{ p.nombre|lower }} los docentes no podrán cambiar notas y las familias podrán descargar el boletín. ¿Cerrar?"{% endif %}>{% csrf_token %}<button class="boton boton--secundario boton--chico" type="submit">{% if p.cerrado %}Reabrir{% else %}Cerrar y publicar boletín{% endif %}</button></form></div></li>
+      {% empty %}<li class="secundario">No hay periodos. <a href="{% url 'gestion_nuevo' 'periodos' %}">Cree el primero</a>.</li>{% endfor %}</ul></section>
+    <section class="panel"><div class="panel__cabeza"><h2>Estructura académica</h2></div>
+      <ul class="lista">
+        <li><div class="lista__fila"><span><span class="lista__titulo">Años lectivos</span> <span class="lista__meta">{{ anios|length }}</span></span><a href="{% url 'gestion_lista' 'anios' %}">Administrar</a></div></li>
+        <li><div class="lista__fila"><span><span class="lista__titulo">Grados</span> <span class="lista__meta">{{ grados|length }}</span></span><a href="{% url 'gestion_lista' 'grados' %}">Administrar</a></div></li>
+        <li><div class="lista__fila"><span><span class="lista__titulo">Asignaturas</span> <span class="lista__meta">{{ asignaturas|length }}</span></span><a href="{% url 'gestion_lista' 'asignaturas' %}">Administrar</a></div></li>
+        <li><div class="lista__fila"><span class="lista__titulo">Grupos y clases</span><a href="{% url 'grupos' %}">Administrar</a></div></li>
+      </ul></section>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,9 @@
+{% extends "base/base.html" %}
+{% block titulo %}Inicio{% endblock %}
+{% block contenido %}
+<div class="encabezado"><div><h1>Hola, {{ user.first_name }}</h1><p class="encabezado__sub">{% if hijos %}Elija a quién quiere consultar.{% endif %}</p></div></div>
+{% if hijos %}<div class="clases">{% for h in hijos %}<article class="clase"><div class="persona"><span class="avatar">{{ h.iniciales }}</span><div><h3>{{ h.nombre_natural }}</h3>
+<p class="clase__grupo" style="margin:0">{% with m=h.matricula_actual %}{% if m %}{{ m.grupo.nombre_largo }}{% else %}Sin matrícula este año{% endif %}{% endwith %}</p></div></div>
+<div class="clase__enlaces"><a class="boton" href="{% url 'familia_resumen' h.pk %}">Ver notas, tareas y asistencia</a></div></article>{% endfor %}</div>
+{% else %}<div class="panel vacio"><p><strong>Su cuenta todavía no está vinculada a ningún estudiante.</strong></p><p>Comuníquese con la secretaría del colegio para que lo registren como acudiente.</p></div>{% endif %}
+{% endblock %}

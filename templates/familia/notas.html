@@ -1,0 +1,13 @@
+{% extends "familia/_base.html" %}{% load pizarra %}
+{% block familia %}
+{% include "familia/_periodos.html" %}
+<section class="panel"><div class="panel__cabeza"><h2>{{ periodo.nombre }}</h2><span>Promedio {% desempeno promedio %}</span></div>
+{% for f in filas %}<details class="detalle"><summary><span><span class="lista__titulo">{{ f.clase.asignatura }}</span><br><span class="lista__meta">{{ f.clase.docente.nombre_completo }}</span></span><span style="margin-left:auto">{% desempeno f.nota %}</span></summary>
+  <div class="tabla-envoltura">{% if f.actividades %}<table><thead><tr><th>Actividad</th><th>Fecha</th><th class="num">Peso</th><th class="num">Nota</th></tr></thead>
+  <tbody>{% for a in f.actividades %}<tr><th scope="row">{{ a.actividad.titulo }}<div class="lista__meta">{{ a.actividad.get_tipo_display }}</div></th><td>{{ a.actividad.fecha|date:"j \d\e F"|lower }}</td>
+  <td class="num">{% if a.actividad.peso %}{{ a.actividad.peso|floatformat:"-2" }} %{% else %}<span class="secundario">Igual</span>{% endif %}</td>
+  <td class="num">{% if a.valor is None %}<span class="secundario">Sin calificar</span>{% else %}{% desempeno a.valor False %}{% endif %}</td></tr>{% endfor %}</tbody></table>
+  {% else %}<p class="vacio">El docente aún no ha registrado actividades en este periodo.</p>{% endif %}</div></details>{% endfor %}
+</section>
+<p class="campo__ayuda" style="margin-top:12px">Escala del colegio: Bajo, menos de {{ colegio.desde_basico }}. Básico, desde {{ colegio.desde_basico }}. Alto, desde {{ colegio.desde_alto }}. Superior, desde {{ colegio.desde_superior }}.</p>
+{% endblock %}

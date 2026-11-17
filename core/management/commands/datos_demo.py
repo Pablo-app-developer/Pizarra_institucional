@@ -1,0 +1,260 @@
+"""Carga un colegio de ejemplo completo para mostrar la plataforma.
+
+    python manage.py datos_demo
+
+Todos los nombres son inventados. No usar sobre una base con datos reales:
+el comando se niega a correr si ya existe el colegio de ejemplo, salvo con --reiniciar.
+"""
+import random
+from datetime import date, timedelta
+from decimal import Decimal
+
+from django.core.management.base import BaseCommand, CommandError
+from django.db import transaction
+from django.utils import timezone
+
+from core.models import (
+    Actividad, Acudiencia, AnioLectivo, Asignatura, Asistencia, Clase, Colegio, ComentarioBoletin,
+    Comunicado, Entrega, Estudiante, Grado, Grupo, Matricula, Nota, Observacion, Periodo, Tarea, Usuario,
+)
+
+NOMBRE = "Colegio Los Arrayanes"
+CLAVE = "pizarra2026"
+
+NOMBRES_F = ["María José", "Valentina", "Sara Sofía", "Isabella", "Luciana", "Mariana", "Gabriela", "Salomé",
+             "Juliana", "Antonella", "Daniela", "Laura Camila", "Paula Andrea", "Manuela", "Catalina"]
+NOMBRES_M = ["Santiago", "Samuel", "Juan José", "Matías", "Emiliano", "Tomás", "Nicolás", "Sebastián",
+             "Juan Pablo", "Andrés Felipe", "David", "Miguel Ángel", "Jerónimo", "Simón", "Felipe"]
+APELLIDOS = ["Rojas", "Pinto", "Ardila", "Mantilla", "Serrano", "Rueda", "Vargas", "Gómez", "Díaz", "Suárez",
+             "Prada", "Quintero", "Jaimes", "Carreño", "Villamizar", "Ortiz", "Cáceres", "Niño", "Afanador", "Pabón"]
+ADULTOS_F = ["Claudia", "Sandra", "Luz Marina", "Adriana", "Diana", "Martha", "Yolanda", "Carolina", "Mónica", "Patricia"]
+ADULTOS_M = ["Carlos", "Jorge", "Luis Fernando", "Óscar", "Jairo", "Hernán", "Wilson", "Fabián", "Germán", "Ricardo"]
+
+ASIGNATURAS = [
+    ("Matemáticas", "Matemáticas", 5), ("Lengua castellana", "Humanidades", 5), ("Inglés", "Humanidades", 4),
+    ("Ciencias naturales", "Ciencias naturales", 4), ("Ciencias sociales", "Ciencias sociales", 4),
+    ("Educación física", "Educación física", 2),
+]
+ACTIVIDADES = {
+    "Matemáticas": [("Taller de fracciones", "taller"), ("Evaluación de ecuaciones", "evaluacion"), ("Proyecto de estadística", "proyecto"), ("Quiz de geometría", "evaluacion")],
+    "Lengua castellana": [("Comprensión de lectura", "taller"), ("Ensayo argumentativo", "tarea"), ("Exposición del plan lector", "exposicion"), ("Evaluación de ortografía", "evaluacion")],
+    "Inglés": [("Vocabulary quiz", "evaluacion"), ("Diálogo en parejas", "exposicion"), ("Workbook unidad 4", "taller"), ("Listening test", "evaluacion")],
+    "Ciencias naturales": [("Laboratorio de mezclas", "taller"), ("Evaluación de la célula", "evaluacion"), ("Maqueta del ecosistema", "proyecto"), ("Consulta sobre energías", "tarea")],
+    "Ciencias sociales": [("Mapa de regiones", "taller"), ("Línea de tiempo", "tarea"), ("Evaluación de la Independencia", "evaluacion"), ("Debate sobre participación", "exposicion")],
+    "Educación física": [("Test de resistencia", "evaluacion"), ("Fundamentos de voleibol", "participacion"), ("Rutina de coordinación", "exposicion"), ("Autoevaluación", "autoevaluacion")],
+}
+TAREAS = {
+    "Matemáticas": [("Ejercicios de la página 84", "Resolver los ejercicios 1 al 12 en el cuaderno, con procedimiento."), ("Guía de proporcionalidad", "Desarrollar la guía entregada en clase. Se revisa en el cuaderno.")],
+    "Lengua castellana": [("Leer capítulos 5 y 6 del plan lector", "Traer tres preguntas sobre la lectura para el conversatorio."), ("Borrador del cuento", "Mínimo una página, con inicio, nudo y desenlace.")],
+    "Inglés": [("Workbook páginas 40 a 42", "Completar las actividades de la unidad 5."), ("Grabar presentación personal", "Un audio de un minuto presentándose en inglés.")],
+    "Ciencias naturales": [("Informe de laboratorio", "Entregar el informe con dibujo, materiales, procedimiento y conclusión."), ("Consulta sobre el ciclo del agua", "Una página con dibujo y fuentes.")],
+    "Ciencias sociales": [("Entrevista a un adulto mayor", "Cinco preguntas sobre cómo era el barrio hace 30 años."), ("Mapa político de Colombia", "Ubicar departamentos y capitales, a color.")],
+    "Educación física": [("Registro de actividad física", "Anotar durante una semana la actividad diaria y su duración."), ("Traer uniforme completo", "Sudadera, camiseta y tenis blancos para la prueba.")],
+}
+OBSERVACIONES = [
+    ("reconocimiento", "Se destacó por su liderazgo en el trabajo en grupo y por ayudar a sus compañeros."),
+    ("academica", "Ha bajado el ritmo en la entrega de trabajos. Se acordó con el estudiante un plan para ponerse al día."),
+    ("convivencia", "Usó el celular en clase después de un primer llamado. Se dialogó y se comprometió a guardarlo."),
+    ("reconocimiento", "Excelente participación en la feria de la ciencia."),
+    ("academica", "Se recomienda reforzar en casa la lectura diaria de 20 minutos."),
+]
+COMENTARIOS = [
+    "Estudiante responsable y participativa. Mantiene un rendimiento constante en todas las áreas.",
+    "Muestra avances importantes frente al periodo anterior. Debe mantener la constancia en las tareas.",
+    "Tiene buenas capacidades, pero necesita mayor acompañamiento en casa para cumplir con los compromisos.",
+    "Se destaca por su respeto y colaboración. Puede mejorar su participación en clase.",
+]
+
+
+def dias_habiles(desde, hasta):
+    d = desde
+    while d <= hasta:
+        if d.weekday() < 5:
+            yield d
+        d += timedelta(days=1)
+
+
+class Command(BaseCommand):
+    help = "Crea un colegio de ejemplo con estudiantes, notas, tareas y asistencia."
+
+    def add_arguments(self, parser):
+        parser.add_argument("--reiniciar", action="store_true", help="Borra el colegio de ejemplo y lo crea de nuevo.")
+
+    @transaction.atomic
+    def handle(self, *args, **opciones):
+        existente = Colegio.objects.filter(nombre=NOMBRE).first()
+        if existente:
+            if not opciones["reiniciar"]:
+                raise CommandError("El colegio de ejemplo ya existe. Use --reiniciar para recrearlo.")
+            Clase.objects.filter(grupo__anio__colegio=existente).delete()
+            Grupo.objects.filter(anio__colegio=existente).delete()
+            existente.delete()
+
+        rnd = random.Random(2026)
+        hoy = timezone.localdate()
+        anio_n = hoy.year
+        col = Colegio.objects.create(
+            nombre=NOMBRE, lema="Aprender para servir", nit="900.123.456-7", codigo_dane="368547000123",
+            resolucion="Resolución de aprobación 04512 de 2015", ciudad="Piedecuesta, Santander",
+            direccion="Carrera 6 # 12-40", telefono="607 655 0100", correo="secretaria@losarrayanes.example",
+            nombre_rector="Beatriz Helena Mantilla Rueda",
+        )
+
+        def usuario(doc, nombres, apellidos, rol, **extra):
+            u = Usuario(username=doc, documento=doc, first_name=nombres, last_name=apellidos, rol=rol, colegio=col, **extra)
+            u.set_password(CLAVE)
+            u.save()
+            return u
+
+        usuario("1001", "Beatriz Helena", "Mantilla Rueda", "directivo", email="rectoria@losarrayanes.example")
+        docentes = [
+            usuario("2001", "Jorge Enrique", "Serrano Prada", "docente", telefono="300 555 0101"),
+            usuario("2002", "Diana Marcela", "Ardila Gómez", "docente", telefono="300 555 0102"),
+            usuario("2003", "Andrea", "Villamizar Ortiz", "docente", telefono="300 555 0103"),
+            usuario("2004", "Óscar Iván", "Jaimes Carreño", "docente", telefono="300 555 0104"),
+            usuario("2005", "Luz Dary", "Quintero Niño", "docente", telefono="300 555 0105"),
+            usuario("2006", "Fabián", "Cáceres Díaz", "docente", telefono="300 555 0106"),
+        ]
+
+        anio = AnioLectivo.objects.create(colegio=col, nombre=str(anio_n), activo=True)
+        # Cuatro periodos; el vigente se ubica alrededor de hoy para que el ejemplo siempre se vea "en curso".
+        inicio_p4 = hoy - timedelta(days=56)
+        cortes = [inicio_p4 - timedelta(days=210), inicio_p4 - timedelta(days=140), inicio_p4 - timedelta(days=70), inicio_p4]
+        nombres_p = ["Primer periodo", "Segundo periodo", "Tercer periodo", "Cuarto periodo"]
+        periodos = []
+        for i, ini in enumerate(cortes):
+            fin = cortes[i + 1] - timedelta(days=1) if i < 3 else hoy + timedelta(days=13)
+            periodos.append(Periodo.objects.create(
+                anio=anio, numero=i + 1, nombre=nombres_p[i], fecha_inicio=ini, fecha_fin=fin,
+                peso=Decimal("25"), cerrado=i < 3,
+            ))
+
+        asignaturas = [Asignatura.objects.create(colegio=col, nombre=n, area=a) for n, a, _ in ASIGNATURAS]
+        horas = {n: h for n, _, h in ASIGNATURAS}
+        grados = [
+            Grado.objects.create(colegio=col, nombre="Sexto", abreviatura="6°", orden=6),
+            Grado.objects.create(colegio=col, nombre="Séptimo", abreviatura="7°", orden=7),
+            Grado.objects.create(colegio=col, nombre="Octavo", abreviatura="8°", orden=8),
+        ]
+        grupos = [Grupo.objects.create(anio=anio, grado=g, nombre="A", director=docentes[i]) for i, g in enumerate(grados)]
+        clases = []
+        for grupo in grupos:
+            for j, asig in enumerate(asignaturas):
+                clases.append(Clase.objects.create(grupo=grupo, asignatura=asig, docente=docentes[j], horas_semanales=horas[asig.nombre]))
+
+        # Estudiantes y acudientes. Algunos acudientes tienen dos hijos en grupos distintos.
+        matriculas, doc_est, doc_ac = [], 1100000000, 3000
+        acudientes_previos = []
+        for gi, grupo in enumerate(grupos):
+            for k in range(16):
+                ap1, ap2 = rnd.sample(APELLIDOS, 2)
+                nina = rnd.random() < 0.5
+                doc_est += rnd.randint(11, 97)
+                est = Estudiante.objects.create(
+                    colegio=col, nombres=rnd.choice(NOMBRES_F if nina else NOMBRES_M), apellidos=f"{ap1} {ap2}",
+                    documento=str(doc_est), fecha_nacimiento=date(anio_n - 11 - gi, rnd.randint(1, 12), rnd.randint(1, 28)),
+                )
+                m = Matricula.objects.create(estudiante=est, grupo=grupo, fecha=cortes[0])
+                m.nivel = rnd.choice([4.6, 4.3, 4.0, 4.0, 3.7, 3.7, 3.4, 3.1, 2.8])  # tendencia académica del estudiante
+                m.constancia = rnd.choice([0.98, 0.95, 0.95, 0.9, 0.85, 0.7])
+                matriculas.append(m)
+                if gi > 0 and k < 3 and acudientes_previos:
+                    ac = acudientes_previos.pop()
+                    est.apellidos = ac.apellidos_hijo
+                    est.save()
+                else:
+                    doc_ac += 1
+                    madre = rnd.random() < 0.65
+                    ac = usuario(str(doc_ac), rnd.choice(ADULTOS_F if madre else ADULTOS_M),
+                                 f"{ap2 if madre else ap1} {rnd.choice(APELLIDOS)}", "acudiente",
+                                 telefono=f"31{rnd.randint(0, 9)} 555 {rnd.randint(1000, 9999)}")
+                    ac.parentesco = "madre" if madre else "padre"
+                    ac.apellidos_hijo = est.apellidos
+                    if gi < 2 and k < 3:
+                        acudientes_previos.append(ac)
+                Acudiencia.objects.create(estudiante=est, acudiente=ac, parentesco=ac.parentesco)
+
+        por_grupo = {g.id: [m for m in matriculas if m.grupo_id == g.id] for g in grupos}
+
+        # Notas
+        notas = []
+        for clase in clases:
+            plan = ACTIVIDADES[clase.asignatura.nombre]
+            dificultad = rnd.uniform(-0.25, 0.2)
+            for pi, periodo in enumerate(periodos):
+                vigente = pi == 3
+                titulos = plan[:3] if not vigente else plan[:2]
+                pesos = [30, 30, 40] if not vigente else [0, 0]
+                for ai, (titulo, tipo) in enumerate(titulos):
+                    dias = (periodo.fecha_fin - periodo.fecha_inicio).days
+                    fecha = periodo.fecha_inicio + timedelta(days=int(dias * (ai + 1) / (len(titulos) + 1)))
+                    if vigente:
+                        fecha = min(fecha, hoy - timedelta(days=3 + 9 * (1 - ai)))
+                    act = Actividad.objects.create(
+                        clase=clase, periodo=periodo, titulo=titulo if pi == 0 or vigente else f"{titulo} {pi + 1}",
+                        tipo=tipo, fecha=fecha, peso=Decimal(pesos[ai]),
+                    )
+                    for m in por_grupo[clase.grupo_id]:
+                        if vigente and ai == 1 and rnd.random() < 0.12:
+                            continue  # aún sin calificar
+                        valor = m.nivel + dificultad + rnd.gauss(0, 0.45)
+                        valor = max(1.0, min(5.0, round(valor, 1)))
+                        notas.append(Nota(actividad=act, matricula=m, valor=Decimal(str(valor))))
+        Nota.objects.bulk_create(notas)
+
+        # Asistencia de las últimas tres semanas
+        asistencias = []
+        for clase in clases:
+            dias_clase = [d for d in dias_habiles(hoy - timedelta(days=21), hoy - timedelta(days=1))
+                          if (d.weekday() + clase.asignatura_id) % 5 < clase.horas_semanales]
+            for d in dias_clase:
+                for m in por_grupo[clase.grupo_id]:
+                    r = rnd.random()
+                    estado = "P" if r < m.constancia else rnd.choice(["A", "A", "T", "E"])
+                    asistencias.append(Asistencia(clase=clase, matricula=m, fecha=d, estado=estado))
+        Asistencia.objects.bulk_create(asistencias)
+
+        # Tareas: una ya vencida y revisada, otra por entregar
+        entregas = []
+        for clase in clases:
+            (t1, d1), (t2, d2) = TAREAS[clase.asignatura.nombre]
+            vencida = Tarea.objects.create(clase=clase, titulo=t1, descripcion=d1,
+                                           fecha_asignacion=hoy - timedelta(days=12), fecha_entrega=hoy - timedelta(days=rnd.randint(3, 6)))
+            Tarea.objects.create(clase=clase, titulo=t2, descripcion=d2, fecha_asignacion=hoy - timedelta(days=2),
+                                 fecha_entrega=hoy + timedelta(days=rnd.randint(0, 6)))
+            for m in por_grupo[clase.grupo_id]:
+                r = rnd.random()
+                estado = "entregada" if r < m.constancia - 0.05 else rnd.choice(["tarde", "no_entregada", "no_entregada"])
+                entregas.append(Entrega(tarea=vencida, matricula=m, estado=estado,
+                                        comentario="Debe traerla la próxima clase." if estado == "no_entregada" and rnd.random() < 0.5 else ""))
+        Entrega.objects.bulk_create(entregas)
+
+        for m in matriculas:
+            if rnd.random() < 0.45:
+                tipo, texto = rnd.choice(OBSERVACIONES)
+                Observacion.objects.create(matricula=m, autor=m.grupo.director, tipo=tipo, texto=texto,
+                                           fecha=hoy - timedelta(days=rnd.randint(2, 40)))
+            for periodo in periodos[:3]:
+                ComentarioBoletin.objects.create(matricula=m, periodo=periodo, texto=rnd.choice(COMENTARIOS))
+
+        rectora = Usuario.objects.get(username="1001")
+        Comunicado.objects.create(colegio=col, autor=rectora, titulo="Entrega de boletines del cuarto periodo",
+                                  cuerpo="Apreciadas familias:\n\nLa entrega de boletines del cuarto periodo será el último viernes del mes, de 7:00 a 11:00 a. m., en cada salón.\n\nLos esperamos puntualmente.",
+                                  publicado=timezone.now() - timedelta(days=2))
+        Comunicado.objects.create(colegio=col, autor=rectora, titulo="Jornada pedagógica: no hay clases el viernes",
+                                  cuerpo="El próximo viernes los docentes estarán en jornada pedagógica. Los estudiantes no asisten al colegio.",
+                                  publicado=timezone.now() - timedelta(days=9))
+        Comunicado.objects.create(colegio=col, autor=rectora, grupo=grupos[0], titulo="Salida pedagógica de Sexto A",
+                                  cuerpo="La salida al Jardín Botánico es el próximo miércoles. Por favor envíen el permiso firmado antes del lunes.",
+                                  publicado=timezone.now() - timedelta(days=4))
+
+        ejemplo = Acudiencia.objects.filter(estudiante__matriculas__grupo=grupos[0]).select_related("acudiente", "estudiante").first()
+        doble = next((a for a in Usuario.objects.filter(colegio=col, rol="acudiente") if a.acudidos.count() > 1), None)
+        self.stdout.write(self.style.SUCCESS(f"\nColegio de ejemplo creado: {NOMBRE}"))
+        self.stdout.write(f"  {len(matriculas)} estudiantes, {len(clases)} clases, {len(notas)} notas, {len(asistencias)} registros de asistencia\n")
+        self.stdout.write(f"Contraseña de todas las cuentas de ejemplo: {CLAVE}")
+        self.stdout.write("  Rectoría:   usuario 1001")
+        self.stdout.write("  Docente:    usuario 2001 (Matemáticas, director de 6°A)")
+        self.stdout.write(f"  Acudiente:  usuario {ejemplo.acudiente.username} ({ejemplo.acudiente.nombre_completo}, de {ejemplo.estudiante.nombre_natural})")
+        if doble:
+            self.stdout.write(f"  Acudiente con dos hijos: usuario {doble.username}")

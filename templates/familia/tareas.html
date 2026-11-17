@@ -1,0 +1,7 @@
+{% extends "familia/_base.html" %}
+{% block familia %}
+<section class="panel"><div class="panel__cabeza"><h2>Por entregar</h2></div>
+<ul class="lista">{% for t in pendientes %}{% include "familia/_tarea.html" with detalle=True %}{% empty %}<li class="secundario">No hay tareas pendientes.</li>{% endfor %}</ul></section>
+<section class="panel"><div class="panel__cabeza"><h2>Anteriores</h2></div>
+<ul class="lista">{% for t in anteriores %}{% include "familia/_tarea.html" %}{% empty %}<li class="secundario">Todavía no hay tareas vencidas.</li>{% endfor %}</ul></section>
+{% endblock %}

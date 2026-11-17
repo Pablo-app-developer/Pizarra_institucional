@@ -1,0 +1,5 @@
+<ul class="lista">{% for o in observaciones %}<li>
+  <div class="lista__fila"><span><span class="estado {% if o.tipo == 'reconocimiento' %}estado--bien{% elif o.tipo == 'convivencia' %}estado--aviso{% else %}estado--info{% endif %}">{{ o.get_tipo_display }}</span>{% if not o.visible_familia %} <span class="estado">Nota interna</span>{% endif %}</span>
+  <span class="lista__meta">{{ o.fecha|date:"j \d\e F \d\e Y"|lower }}{% if o.autor %}, {{ o.autor.nombre_completo }}{% endif %}</span></div>
+  <p style="margin-top:6px;max-width:75ch">{{ o.texto|linebreaksbr }}</p></li>
+{% empty %}<li class="secundario">{{ vacio|default:"No hay observaciones registradas." }}</li>{% endfor %}</ul>

@@ -1,0 +1,5 @@
+{% load static %}<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Sin permiso | Pizarra</title><link rel="stylesheet" href="{% static 'css/app.css' %}"></head>
+<body><main style="max-width:520px;margin:12vh auto;padding:0 20px"><div class="panel"><div class="panel__cuerpo">
+<h1>No tiene permiso para ver esta página</h1>
+<p style="margin:10px 0 18px">{{ exception|default:"Su cuenta no tiene acceso a esta sección." }}</p>
+<a class="boton" href="/">Volver al inicio</a></div></div></main></body></html>

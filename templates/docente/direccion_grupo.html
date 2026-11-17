@@ -1,0 +1,19 @@
+{% extends "base/base.html" %}{% load pizarra %}
+{% block titulo %}Dirección de {{ grupo }}{% endblock %}
+{% block contenido %}
+<div class="encabezado"><div><p class="miga"><a href="{% url 'inicio' %}">Inicio</a> /</p><h1>Dirección de grupo, {{ grupo.nombre_largo }}</h1>
+<p class="encabezado__sub">Rendimiento del grupo y observación general que sale en el boletín.</p></div>
+<div class="encabezado__acciones"><a class="boton boton--secundario" href="{% url 'boletines_grupo' grupo.pk periodo.pk %}" target="_blank" rel="noopener">Ver boletines en PDF</a></div></div>
+{% include "docente/_periodos.html" %}
+{% if periodo.cerrado %}<p class="aviso aviso--info">{{ periodo.nombre }} está cerrado. Las observaciones ya no se pueden cambiar.</p>{% endif %}
+<form method="post">{% csrf_token %}<input type="hidden" name="periodo" value="{{ periodo.pk }}">
+<div class="tabla-envoltura"><table class="personas">
+  <thead><tr><th>Estudiante</th><th>Promedio</th><th class="centro">Puesto</th><th>Asignaturas perdidas</th><th style="min-width:300px">Observación para el boletín</th></tr></thead>
+  <tbody>{% for f in filas %}<tr><th scope="row"><a href="{% url 'observador' f.matricula.pk %}">{{ f.matricula.estudiante }}</a></th>
+    <td>{% desempeno f.promedio %}</td><td class="centro">{{ f.puesto|default:"—" }}</td>
+    <td>{% if f.perdidas %}{{ f.perdidas|join:", " }}{% else %}<span class="secundario">Ninguna</span>{% endif %}</td>
+    <td><textarea name="c_{{ f.matricula.pk }}" rows="2" aria-label="Observación de {{ f.matricula.estudiante }}"{% if periodo.cerrado %} disabled{% endif %}>{{ f.comentario }}</textarea></td></tr>
+  {% empty %}<tr><td colspan="5" class="vacio">Este grupo no tiene estudiantes matriculados.</td></tr>{% endfor %}</tbody></table></div>
+{% if filas and not periodo.cerrado %}<div class="barra-guardar"><span class="pequeno secundario">Lo que deje vacío no aparece en el boletín.</span><button class="boton" type="submit">Guardar observaciones</button></div>{% endif %}
+</form>
+{% endblock %}

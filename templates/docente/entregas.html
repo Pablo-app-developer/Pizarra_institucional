@@ -1,0 +1,18 @@
+{% extends "docente/_clase.html" %}
+{% block clase %}
+<h2>{{ tarea.titulo }}</h2>
+<p class="secundario" style="margin:2px 0 16px">Se entrega el {{ tarea.fecha_entrega|date:"j \d\e F \d\e Y"|lower }}. Marque solo a quienes ya revisó; los demás quedan pendientes.</p>
+<form method="post">{% csrf_token %}
+<div class="tabla-envoltura"><table class="personas">
+  <thead><tr><th>Estudiante</th><th>Entrega</th><th>Comentario para la familia</th></tr></thead>
+  <tbody>{% for f in filas %}<tr>
+    <th scope="row">{{ f.matricula.estudiante }}</th>
+    <td><div class="opciones" role="radiogroup" aria-label="Entrega de {{ f.matricula.estudiante }}">
+      <label><input type="radio" name="e_{{ f.matricula.pk }}" value=""{% if not f.entrega %} checked{% endif %}>Pendiente</label>
+      {% for valor, etiqueta in estados %}<label class="op-{{ valor }}"><input type="radio" name="e_{{ f.matricula.pk }}" value="{{ valor }}"{% if f.entrega.estado == valor %} checked{% endif %}>{{ etiqueta }}</label>{% endfor %}
+    </div></td>
+    <td><input type="text" name="c_{{ f.matricula.pk }}" value="{{ f.entrega.comentario|default:'' }}" maxlength="240" aria-label="Comentario para {{ f.matricula.estudiante }}"></td>
+  </tr>{% endfor %}</tbody></table></div>
+<div class="barra-guardar"><a href="{% url 'clase_tareas' clase.pk %}">Cancelar</a><button class="boton" type="submit">Guardar entregas</button></div>
+</form>
+{% endblock %}

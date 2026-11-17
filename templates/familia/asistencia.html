@@ -1,0 +1,15 @@
+{% extends "familia/_base.html" %}
+{% block familia %}
+<dl class="cifras">
+  <div class="cifra"><dt>Asistencia del año</dt><dd>{% if total.total %}{{ total.porcentaje }} %{% else %}<small>Sin registros</small>{% endif %}</dd></div>
+  <div class="cifra"><dt>Faltas sin excusa</dt><dd>{{ total.ausente }}</dd></div>
+  <div class="cifra"><dt>Faltas con excusa</dt><dd>{{ total.excusa }}</dd></div>
+  <div class="cifra"><dt>Llegadas tarde</dt><dd>{{ total.tarde }}</dd></div>
+</dl>
+<section class="panel"><div class="panel__cabeza"><h2>Faltas y llegadas tarde</h2></div>
+<div class="tabla-envoltura">{% if novedades %}<table><thead><tr><th>Fecha</th><th>Clase</th><th>Novedad</th></tr></thead>
+<tbody>{% for a in novedades %}<tr><td>{{ a.fecha|date:"l j \d\e F"|lower|capfirst }}</td><td>{{ a.clase.asignatura }}</td>
+<td><span class="estado {% if a.estado == 'A' %}estado--mal{% elif a.estado == 'T' %}estado--aviso{% else %}estado--info{% endif %}">{{ a.get_estado_display }}</span></td></tr>{% endfor %}</tbody></table>
+{% else %}<p class="vacio">Sin faltas ni llegadas tarde registradas.</p>{% endif %}</div></section>
+<p class="campo__ayuda" style="margin-top:12px">Para justificar una falta, entregue la excusa al director(a) de grupo.</p>
+{% endblock %}

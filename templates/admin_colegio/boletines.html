@@ -1,0 +1,14 @@
+{% extends "base/base.html" %}
+{% block titulo %}Boletines{% endblock %}
+{% block contenido %}
+<div class="encabezado"><div><h1>Boletines</h1><p class="encabezado__sub">Informe de cada periodo en PDF, listo para imprimir o enviar.</p></div>
+{% if grupo and periodo %}<div class="encabezado__acciones"><a class="boton" href="{% url 'boletines_grupo' grupo.pk periodo.pk %}" target="_blank" rel="noopener">Descargar todos los de {{ grupo }}</a></div>{% endif %}</div>
+{% if not grupo or not periodo %}<div class="panel vacio"><p>Primero cree grupos y periodos en el año activo.</p></div>{% else %}
+{% include "admin_colegio/_filtro_grupo.html" %}
+{% if periodo.cerrado %}<p class="aviso aviso--info">{{ periodo.nombre }} está cerrado: las familias ya pueden descargar este boletín desde su cuenta.</p>
+{% else %}<p class="aviso">{{ periodo.nombre }} sigue abierto. Usted puede generar el boletín para revisarlo, pero las familias lo verán cuando cierre el periodo en <a href="{% url 'configuracion' %}">Configuración</a>.</p>{% endif %}
+<div class="tabla-envoltura"><table><thead><tr><th>Estudiante</th><th>Documento</th><th></th></tr></thead>
+<tbody>{% for m in matriculas %}<tr><th scope="row"><strong>{{ m.estudiante }}</strong></th><td>{{ m.estudiante.documento }}</td>
+<td class="num"><a href="{% url 'boletin_estudiante' m.pk periodo.pk %}" target="_blank" rel="noopener">Abrir boletín en PDF</a></td></tr>
+{% empty %}<tr><td colspan="3" class="vacio">Este grupo no tiene estudiantes matriculados.</td></tr>{% endfor %}</tbody></table></div>{% endif %}
+{% endblock %}

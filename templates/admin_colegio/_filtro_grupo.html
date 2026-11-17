@@ -1,0 +1,5 @@
+<form class="filtros" method="get">
+  <div class="campo"><label for="f-grupo">Grupo</label><select id="f-grupo" name="grupo" data-autoenviar>{% for g in grupos %}<option value="{{ g.pk }}"{% if g == grupo %} selected{% endif %}>{{ g.nombre_largo }}</option>{% endfor %}</select></div>
+  <div class="campo"><label for="f-periodo">Periodo</label><select id="f-periodo" name="periodo" data-autoenviar>{% for p in periodos %}<option value="{{ p.pk }}"{% if p == periodo %} selected{% endif %}>{{ p.nombre }}{% if p.cerrado %} (cerrado){% endif %}</option>{% endfor %}</select></div>
+  <noscript><button class="boton boton--secundario">Ver</button></noscript>
+</form>

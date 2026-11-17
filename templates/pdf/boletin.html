@@ -1,0 +1,43 @@
+{% load pizarra %}<!doctype html>
+<html lang="es"><head><meta charset="utf-8"><title>Boletín {{ periodo.nombre }}</title>
+<style>
+@page { size: Letter; margin: 16mm 15mm 18mm; @bottom-left { content: "{{ colegio.nombre }}"; font: 8pt "Inter", sans-serif; color: #55615b; } @bottom-right { content: "Emitido el {{ emitido|date:'j \d\e F \d\e Y'|lower }}"; font: 8pt "Inter", sans-serif; color: #55615b; } }
+* { box-sizing: border-box; }
+body { font: 9.5pt/1.4 "Inter", "DejaVu Sans", sans-serif; color: #17211d; margin: 0; }
+.boletin { page-break-after: always; } .boletin:last-child { page-break-after: auto; }
+header { display: flex; gap: 16pt; justify-content: space-between; align-items: flex-end; border-bottom: 2.5pt solid #14523f; padding-bottom: 8pt; }
+header h1 { font-size: 15pt; margin: 0; line-height: 1.15; } header p { margin: 2pt 0 0; font-size: 8pt; color: #55615b; }
+.titulo { text-align: right; white-space: nowrap; } .titulo strong { display: block; font-size: 11pt; color: #14523f; }
+.datos { display: flex; gap: 18pt; margin: 10pt 0; padding: 7pt 10pt; background: #eef1ee; border-radius: 3pt; }
+.datos div { flex: 1; } .datos span { display: block; font-size: 7.5pt; color: #55615b; } .datos b { font-size: 10pt; }
+table { width: 100%; border-collapse: collapse; }
+th, td { padding: 5pt 6pt; border-bottom: .5pt solid #c9d1cc; text-align: left; vertical-align: top; }
+thead th { font-size: 7.5pt; color: #55615b; border-bottom: 1pt solid #17211d; }
+.c { text-align: center; } .doc { font-size: 7.5pt; color: #55615b; }
+.d-bajo { color: #a32a1f; font-weight: 700; } .d-superior { color: #14523f; font-weight: 700; } .d-alto, .d-basico { font-weight: 700; }
+tfoot td { font-weight: 700; border-top: 1pt solid #17211d; border-bottom: 0; }
+.bloques { display: flex; gap: 14pt; margin-top: 10pt; } .bloques > div { flex: 1; border: .5pt solid #c9d1cc; border-radius: 3pt; padding: 7pt 9pt; }
+h2 { font-size: 8.5pt; margin: 0 0 3pt; color: #14523f; }
+.obs { min-height: 44pt; white-space: pre-line; }
+.escala { font-size: 7.5pt; color: #55615b; margin-top: 8pt; }
+.firmas { display: flex; gap: 40pt; margin-top: 38pt; } .firmas div { flex: 1; border-top: .7pt solid #17211d; padding-top: 3pt; font-size: 8pt; text-align: center; }
+</style></head><body>
+{% for b in boletines %}<section class="boletin">
+<header><div><h1>{{ colegio.nombre }}</h1><p>{% if colegio.resolucion %}{{ colegio.resolucion }}. {% endif %}{% if colegio.nit %}NIT {{ colegio.nit }}. {% endif %}{% if colegio.codigo_dane %}DANE {{ colegio.codigo_dane }}. {% endif %}{{ colegio.ciudad }}</p></div>
+<div class="titulo"><strong>Informe académico</strong>{{ b.periodo.nombre }}, año {{ b.grupo.anio.nombre }}</div></header>
+<div class="datos"><div><span>Estudiante</span><b>{{ b.est.apellidos }} {{ b.est.nombres }}</b></div><div><span>Documento</span><b>{{ b.est.tipo_documento }} {{ b.est.documento }}</b></div>
+<div><span>Grupo</span><b>{{ b.grupo.nombre_largo }}</b></div><div><span>Director(a) de grupo</span><b>{{ b.grupo.director.nombre_completo|default:"—" }}</b></div></div>
+<table><thead><tr><th>Asignatura</th><th class="c">Horas</th>{% for p in b.periodos %}<th class="c">P{{ p.numero }}</th>{% endfor %}<th>Desempeño en el periodo</th><th class="c">Faltas</th></tr></thead>
+<tbody>{% for f in b.filas %}<tr><td>{{ f.clase.asignatura }}<div class="doc">{{ f.clase.docente.nombre_completo }}</div></td><td class="c">{{ f.clase.horas_semanales }}</td>
+{% for n in f.notas %}<td class="c">{{ n|nota }}</td>{% endfor %}
+<td{% if f.desempeno %} class="d-{{ f.desempeno.0 }}"{% endif %}>{{ f.desempeno.1|default:"Sin valoración" }}</td><td class="c">{{ f.faltas }}</td></tr>{% endfor %}</tbody>
+<tfoot><tr><td colspan="{{ b.periodos|length|add:1 }}">Promedio del periodo</td><td class="c">{{ b.promedio|nota }}</td><td>{{ b.desempeno.1|default:"" }}</td><td></td></tr></tfoot></table>
+<div class="bloques">
+<div><h2>Puesto en el grupo</h2>{% if b.puesto %}{{ b.puesto }} entre {{ b.total }} estudiantes{% else %}Sin notas suficientes{% endif %}</div>
+<div><h2>Asistencia en el periodo</h2>{% if b.asistencia.total %}{{ b.asistencia.porcentaje }} % de asistencia. {{ b.asistencia.ausente }} falta{{ b.asistencia.ausente|pluralize }} sin excusa, {{ b.asistencia.excusa }} con excusa, {{ b.asistencia.tarde }} tarde.{% else %}Sin registros.{% endif %}</div>
+</div>
+<div class="bloques"><div><h2>Observaciones del director(a) de grupo</h2><div class="obs">{{ b.comentario }}</div></div></div>
+<p class="escala">Escala de valoración ({{ colegio.nota_minima }} a {{ colegio.nota_maxima }}): Bajo, menos de {{ colegio.desde_basico }}. Básico, de {{ colegio.desde_basico }} a menos de {{ colegio.desde_alto }}. Alto, de {{ colegio.desde_alto }} a menos de {{ colegio.desde_superior }}. Superior, desde {{ colegio.desde_superior }}.</p>
+<div class="firmas"><div>{{ colegio.nombre_rector|default:"Rector(a)" }}<br>Rectoría</div><div>{{ b.grupo.director.nombre_completo|default:"Director(a) de grupo" }}<br>Dirección de grupo</div></div>
+</section>{% endfor %}
+</body></html>

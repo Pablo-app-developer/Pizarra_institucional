@@ -1,0 +1,29 @@
+{% extends "familia/_base.html" %}{% load pizarra %}
+{% block familia %}
+{% if por_reforzar or no_entregadas %}<div class="aviso" role="status"><strong>Para tener en cuenta.</strong>
+{% if por_reforzar %} Va perdiendo {{ por_reforzar|length }} asignatura{{ por_reforzar|length|pluralize }} en {{ periodo.nombre|lower }}: {% for f in por_reforzar %}{{ f.clase.asignatura }}{% if not forloop.last %}, {% endif %}{% endfor %}.{% endif %}
+{% if no_entregadas %} Tiene {{ no_entregadas|length }} tarea{{ no_entregadas|length|pluralize }} sin entregar en el último mes.{% endif %}</div>{% endif %}
+<div class="rejilla rejilla--2">
+  <div class="apilado">
+    <section class="panel"><div class="panel__cabeza"><div><h2>Notas de {{ periodo.nombre|lower }}</h2>
+      <p class="pequeno secundario">Promedio hasta hoy: <strong>{{ promedio|nota }}</strong></p></div><a href="{% url 'familia_notas' est.pk %}">Ver cada actividad</a></div>
+      <div class="tabla-envoltura"><table><tbody>{% for f in filas %}<tr><th scope="row">{{ f.clase.asignatura }}<div class="lista__meta">{{ f.clase.docente.nombre_completo }}</div></th><td class="num">{% desempeno f.nota %}</td></tr>{% endfor %}</tbody></table></div>
+    </section>
+    <section class="panel"><div class="panel__cabeza"><h2>Tareas por entregar</h2><a href="{% url 'familia_tareas' est.pk %}">Ver todas</a></div>
+      <ul class="lista">{% for t in proximas %}{% include "familia/_tarea.html" %}{% empty %}<li class="secundario">No hay tareas pendientes. Buen momento para repasar.</li>{% endfor %}</ul></section>
+  </div>
+  <div class="apilado">
+    <section class="panel"><div class="panel__cabeza"><h2>Asistencia del periodo</h2></div><div class="panel__cuerpo">
+      {% if asistencia.total %}<p><strong style="font-size:var(--t-xl)">{{ asistencia.porcentaje }} %</strong> de las clases</p>
+      <div class="barra-asistencia" role="img" aria-label="Asistió al {{ asistencia.porcentaje }} por ciento de las clases"><span style="width:{{ asistencia.porcentaje }}%"></span></div>
+      <p class="pequeno secundario">{{ asistencia.ausente }} falta{{ asistencia.ausente|pluralize }} sin excusa, {{ asistencia.excusa }} con excusa, {{ asistencia.tarde }} llegada{{ asistencia.tarde|pluralize }} tarde. <a href="{% url 'familia_asistencia' est.pk %}">Ver fechas</a></p>
+      {% else %}<p class="secundario">Aún no hay registros de asistencia en este periodo.</p>{% endif %}</div></section>
+    <section class="panel"><div class="panel__cabeza"><h2>Últimas notas</h2></div>
+      <ul class="lista">{% for n in ultimas_notas %}<li><div class="lista__fila"><div><div class="lista__titulo">{{ n.actividad.titulo }}</div><div class="lista__meta">{{ n.actividad.clase.asignatura }}, {{ n.actividad.fecha|date:"j \d\e F"|lower }}</div></div>{% desempeno n.valor False %}</div></li>
+      {% empty %}<li class="secundario">Los docentes aún no han registrado notas.</li>{% endfor %}</ul></section>
+    {% if observaciones %}<section class="panel"><div class="panel__cabeza"><h2>Observaciones recientes</h2><a href="{% url 'familia_observaciones' est.pk %}">Ver todas</a></div>{% include "base/_observaciones.html" %}</section>{% endif %}
+    <section class="panel"><div class="panel__cabeza"><h2>Comunicados</h2><a href="{% url 'comunicados' %}">Ver todos</a></div>
+      <ul class="lista">{% for c in comunicados %}<li><div class="lista__titulo">{{ c.titulo }}</div><div class="lista__meta">{{ c.publicado|date:"j \d\e F"|lower }}</div></li>{% empty %}<li class="secundario">Sin comunicados por ahora.</li>{% endfor %}</ul></section>
+  </div>
+</div>
+{% endblock %}

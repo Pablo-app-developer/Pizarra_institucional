@@ -1,0 +1,21 @@
+{% extends "base/base.html" %}
+{% block titulo %}Grupos y clases{% endblock %}
+{% block contenido %}
+<div class="encabezado">
+  <div><h1>Grupos y clases</h1><p class="encabezado__sub">{% if anio %}Año lectivo {{ anio.nombre }}. Cada grupo con sus asignaturas y docentes.{% else %}No hay un año lectivo activo.{% endif %}</p></div>
+  <div class="encabezado__acciones"><a class="boton boton--secundario" href="{% url 'gestion_nuevo' 'clases' %}">Asignar clase</a><a class="boton" href="{% url 'gestion_nuevo' 'grupos' %}">Nuevo grupo</a></div>
+</div>
+{% for g in grupos %}
+<section class="panel">
+  <div class="panel__cabeza">
+    <div><h2>{{ g.grupo.nombre_largo }}</h2><p class="pequeno secundario">{{ g.n }} estudiante{{ g.n|pluralize }}. Dirige {{ g.grupo.director.nombre_completo|default:"(sin asignar)" }}</p></div>
+    <div class="acciones-fila"><a href="{% url 'direccion_grupo' g.grupo.pk %}">Observaciones de boletín</a><a href="{% url 'gestion_editar' 'grupos' g.grupo.pk %}">Editar grupo</a></div>
+  </div>
+  <div class="tabla-envoltura">{% if g.clases %}<table>
+    <thead><tr><th>Asignatura</th><th>Docente</th><th class="num">Horas semanales</th><th></th></tr></thead>
+    <tbody>{% for c in g.clases %}<tr><th scope="row">{{ c.asignatura }}</th><td>{{ c.docente.nombre_completo }}</td><td class="num">{{ c.horas_semanales }}</td>
+    <td><div class="acciones-fila"><a href="{% url 'clase_notas' c.pk %}">Planilla</a><a href="{% url 'gestion_editar' 'clases' c.pk %}">Editar</a></div></td></tr>{% endfor %}</tbody>
+  </table>{% else %}<div class="vacio"><p>Este grupo aún no tiene clases. <a href="{% url 'gestion_nuevo' 'clases' %}">Asigne la primera</a>.</p></div>{% endif %}</div>
+</section>
+{% empty %}<div class="panel vacio"><p>Cree el primer grupo del año para empezar a matricular.</p></div>{% endfor %}
+{% endblock %}

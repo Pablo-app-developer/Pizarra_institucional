@@ -1,0 +1,18 @@
+{% extends "base/base.html" %}
+{% block titulo %}{{ est.nombres }}{% endblock %}
+{% block contenido %}
+<div class="encabezado">
+  <div class="persona"><span class="avatar">{{ est.iniciales }}</span><div><h1>{{ est.nombre_natural }}</h1>
+  <p class="encabezado__sub">{{ matricula.grupo.nombre_largo }}, año {{ matricula.grupo.anio.nombre }}{% if matricula.grupo.director %}. Director(a) de grupo: {{ matricula.grupo.director.nombre_completo }}{% endif %}</p></div></div>
+  {% if hermanos|length > 1 %}<div class="encabezado__acciones">{% for h in hermanos %}{% if h != est %}<a class="boton boton--secundario" href="{% url 'familia_resumen' h.pk %}">Ver a {{ h.nombres }}</a>{% endif %}{% endfor %}</div>{% endif %}
+</div>
+<nav class="pestanas" aria-label="Secciones">
+  <a href="{% url 'familia_resumen' est.pk %}"{% if seccion == "resumen" %} aria-current="page"{% endif %}>Resumen</a>
+  <a href="{% url 'familia_notas' est.pk %}"{% if seccion == "notas" %} aria-current="page"{% endif %}>Notas</a>
+  <a href="{% url 'familia_tareas' est.pk %}"{% if seccion == "tareas" %} aria-current="page"{% endif %}>Tareas</a>
+  <a href="{% url 'familia_asistencia' est.pk %}"{% if seccion == "asistencia" %} aria-current="page"{% endif %}>Asistencia</a>
+  <a href="{% url 'familia_observaciones' est.pk %}"{% if seccion == "observaciones" %} aria-current="page"{% endif %}>Observaciones</a>
+  <a href="{% url 'familia_boletines' est.pk %}"{% if seccion == "boletines" %} aria-current="page"{% endif %}>Boletines</a>
+</nav>
+{% block familia %}{% endblock %}
+{% endblock %}

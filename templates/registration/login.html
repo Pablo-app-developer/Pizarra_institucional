@@ -1,0 +1,40 @@
+{% load static %}<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Ingresar | Pizarra</title>
+  <link rel="stylesheet" href="{% static 'css/app.css' %}">
+  <link rel="icon" href="{% static 'img/favicon.svg' %}" type="image/svg+xml">
+</head>
+<body>
+<div class="ingreso">
+  <section class="ingreso__tablero">
+    <div class="marca__producto">Pizarra</div>
+    <div>
+      <p class="ingreso__lema">El colegio y la casa, en la misma página.</p>
+      <span class="ingreso__trazo"></span>
+      <ul class="ingreso__puntos">
+        <li>Notas al día, con el desempeño de cada asignatura.</li>
+        <li>Tareas con su fecha de entrega y si ya se entregaron.</li>
+        <li>Asistencia, observaciones y boletines en PDF.</li>
+      </ul>
+    </div>
+    <span></span>
+  </section>
+  <section class="ingreso__form">
+    <form method="post" class="ingreso__caja" novalidate>
+      {% csrf_token %}
+      <h1>Ingresar</h1>
+      <p class="secundario" style="margin-bottom:22px">Use el número de documento con el que el colegio lo registró.</p>
+      {% if form.errors %}<div class="mensaje mensaje--error" role="alert">El documento o la contraseña no coinciden. Revise e intente de nuevo; si la olvidó, pídale al colegio una contraseña nueva.</div>{% endif %}
+      <div class="campo"><label for="id_username">Documento</label>
+        <input type="text" name="username" id="id_username" autocomplete="username" inputmode="numeric" autofocus required value="{{ form.username.value|default:'' }}"></div>
+      <div class="campo"><label for="id_password">Contraseña</label>
+        <input type="password" name="password" id="id_password" autocomplete="current-password" required></div>
+      <input type="hidden" name="next" value="{{ next }}">
+      <button class="boton" type="submit">Ingresar</button>
+    </form>
+  </section>
+</div>
+</body>
+</html>

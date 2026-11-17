@@ -1,0 +1,10 @@
+{% extends "docente/_clase.html" %}{% load pizarra %}
+{% block clase %}
+<div class="tabla-envoltura"><table class="personas">
+  <thead><tr><th>Estudiante</th><th>Definitiva{% if periodo %} en {{ periodo.nombre|lower }}{% endif %}</th><th class="num">Faltas</th><th>Acudientes</th><th></th></tr></thead>
+  <tbody>{% for f in filas %}<tr class="fila-enlace"><th scope="row"><a href="{% url 'observador' f.matricula.pk %}?volver={{ clase.pk }}">{{ f.matricula.estudiante }}</a></th>
+    <td>{% desempeno f.definitiva %}</td><td class="num">{{ f.faltas }}</td>
+    <td>{% for a in f.acudientes %}{{ a.nombre_completo }}{% if a.telefono %} ({{ a.telefono }}){% endif %}{% if not forloop.last %}<br>{% endif %}{% empty %}<span class="secundario">Sin acudiente</span>{% endfor %}</td>
+    <td class="num"><a href="{% url 'observador' f.matricula.pk %}?volver={{ clase.pk }}" style="font-weight:400;text-decoration:underline">Observador</a></td></tr>
+  {% empty %}<tr><td colspan="5" class="vacio">Este grupo no tiene estudiantes matriculados.</td></tr>{% endfor %}</tbody></table></div>
+{% endblock %}

@@ -1,0 +1,19 @@
+{% extends "base/base.html" %}
+{% block titulo %}Observador de {{ est.nombre_natural }}{% endblock %}
+{% block contenido %}
+<div class="encabezado"><div>
+  <p class="miga">{% if volver %}<a href="{% url 'clase_estudiantes' volver %}">Volver a la clase</a>{% elif user.es_directivo %}<a href="{% url 'ficha_estudiante' est.pk %}">Ficha del estudiante</a>{% else %}<a href="{% url 'mis_clases' %}">Mis clases</a>{% endif %} /</p>
+  <div class="persona"><span class="avatar">{{ est.iniciales }}</span><div><h1>{{ est.nombre_natural }}</h1>
+  <p class="encabezado__sub">{{ matricula.grupo.nombre_largo }}{% if matricula.grupo.director %}. Dirige {{ matricula.grupo.director.nombre_completo }}{% endif %}{% if asistencia.total %}. Asistencia {{ asistencia.porcentaje }} %{% endif %}</p></div></div>
+</div></div>
+<div class="rejilla rejilla--2">
+  <div class="apilado">
+    <section class="panel"><div class="panel__cabeza"><h2>Observador</h2></div>{% include "base/_observaciones.html" %}</section>
+    <section class="panel"><div class="panel__cabeza"><h2>Notas del año</h2></div>{% include "base/_resumen_notas.html" %}</section>
+  </div>
+  <form method="post" class="panel" novalidate><div class="panel__cabeza"><h2>Nueva observación</h2></div><div class="panel__cuerpo">
+    {% csrf_token %}{% include "base/_form.html" %}
+    <button class="boton" type="submit">Registrar observación</button>
+  </div></form>
+</div>
+{% endblock %}

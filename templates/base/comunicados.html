@@ -1,0 +1,20 @@
+{% extends "base/base.html" %}
+{% block titulo %}Comunicados{% endblock %}
+{% block contenido %}
+<div class="encabezado">
+  <div><h1>Comunicados</h1><p class="encabezado__sub">Mensajes del colegio para la comunidad educativa.</p></div>
+  {% if user.es_directivo %}<div class="encabezado__acciones">
+    <a class="boton boton--secundario" href="{% url 'gestion_lista' 'comunicados' %}">Editar publicados</a>
+    <a class="boton" href="{% url 'gestion_nuevo' 'comunicados' %}">Nuevo comunicado</a>
+  </div>{% endif %}
+</div>
+{% for c in comunicados %}
+<article class="panel comunicado"><div class="panel__cuerpo">
+  <h3>{{ c.titulo }}</h3>
+  <p class="comunicado__meta">{{ c.publicado|date:"j \d\e F \d\e Y"|lower }}, {% if c.grupo %}para {{ c.grupo.nombre_largo }}{% else %}para todo el colegio{% endif %}{% if c.autor %}. Publica {{ c.autor.nombre_completo }}{% endif %}</p>
+  <div class="comunicado__cuerpo">{{ c.cuerpo }}</div>
+</div></article>
+{% empty %}
+<div class="panel vacio"><p>El colegio no ha publicado comunicados.</p></div>
+{% endfor %}
+{% endblock %}

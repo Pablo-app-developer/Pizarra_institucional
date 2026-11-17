@@ -1,0 +1,8 @@
+{% load pizarra %}
+<div class="tabla-envoltura"><table>
+  <thead><tr><th>Asignatura</th>{% for p in periodos %}<th class="centro">P{{ p.numero }}</th>{% endfor %}<th class="centro">Acumulado</th><th class="num">Faltas</th></tr></thead>
+  <tbody>{% for f in filas %}<tr><th scope="row">{{ f.clase.asignatura }}<div class="lista__meta">{{ f.clase.docente.nombre_completo }}</div></th>
+    {% for p in periodos %}<td class="centro">{% with n=f.periodos|clave:p.id %}{% if n is None %}<span class="secundario">—</span>{% else %}{% desempeno n False %}{% endif %}{% endwith %}</td>{% endfor %}
+    <td class="centro">{% if f.final is None %}<span class="secundario">—</span>{% else %}{% desempeno f.final False %}{% endif %}</td><td class="num">{{ f.faltas }}</td></tr>{% endfor %}</tbody>
+  <tfoot><tr><th scope="row">Promedio</th>{% for p in periodos %}<td class="centro">{{ promedios|clave:p.id|nota }}</td>{% endfor %}<td class="centro">{{ final|nota }}</td><td></td></tr></tfoot>
+</table></div>

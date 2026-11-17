@@ -1,0 +1,17 @@
+{% extends "base/base.html" %}
+{% block titulo %}{{ clase.asignatura }} {{ clase.grupo }}{% endblock %}
+{% block contenido %}
+<div class="encabezado">
+  <div><p class="miga"><a href="{% if user.es_directivo %}{% url 'grupos' %}{% else %}{% url 'mis_clases' %}{% endif %}">{% if user.es_directivo %}Grupos y clases{% else %}Mis clases{% endif %}</a> /</p>
+  <h1>{{ clase.asignatura }}, {{ clase.grupo.nombre_largo }}</h1>
+  {% if user.es_directivo %}<p class="encabezado__sub">Docente: {{ clase.docente.nombre_completo }}</p>{% endif %}</div>
+  <div class="encabezado__acciones">{% block acciones %}{% endblock %}</div>
+</div>
+<nav class="pestanas" aria-label="Secciones de la clase">
+  <a href="{% url 'clase_notas' clase.pk %}"{% if seccion == "notas" %} aria-current="page"{% endif %}>Notas</a>
+  <a href="{% url 'clase_tareas' clase.pk %}"{% if seccion == "tareas" %} aria-current="page"{% endif %}>Tareas</a>
+  <a href="{% url 'clase_asistencia' clase.pk %}"{% if seccion == "asistencia" %} aria-current="page"{% endif %}>Asistencia</a>
+  <a href="{% url 'clase_estudiantes' clase.pk %}"{% if seccion == "estudiantes" %} aria-current="page"{% endif %}>Estudiantes</a>
+</nav>
+{% block clase %}{% endblock %}
+{% endblock %}

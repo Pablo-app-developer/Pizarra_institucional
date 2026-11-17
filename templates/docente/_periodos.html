@@ -1,0 +1,3 @@
+<form class="filtros" method="get"><div class="campo"><label for="f-periodo">Periodo</label>
+<select id="f-periodo" name="periodo" data-autoenviar>{% for p in periodos %}<option value="{{ p.pk }}"{% if p == periodo %} selected{% endif %}>{{ p.nombre }}{% if p.cerrado %} (cerrado){% endif %}</option>{% endfor %}</select></div>
+<noscript><button class="boton boton--secundario">Ver</button></noscript></form>

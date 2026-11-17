@@ -1,0 +1,22 @@
+{% extends "docente/_clase.html" %}
+{% block clase %}
+<form class="filtros" method="get"><div class="campo"><label for="f-fecha">Fecha</label><input type="date" id="f-fecha" name="fecha" value="{{ fecha|date:'Y-m-d' }}" max="{{ hoy|date:'Y-m-d' }}" data-autoenviar></div>
+<noscript><button class="boton boton--secundario">Ver</button></noscript>
+<span class="estado {% if ya_tomada %}estado--bien{% endif %}" style="margin-bottom:10px">{% if ya_tomada %}Ya registrada, puede corregirla{% else %}Sin registrar{% endif %}</span></form>
+<div class="rejilla rejilla--2">
+<form method="post">{% csrf_token %}<input type="hidden" name="fecha" value="{{ fecha|date:'Y-m-d' }}">
+  {% if filas %}<div class="tabla-envoltura"><table class="personas">
+    <thead><tr><th>Estudiante</th><th>{{ fecha|date:"l j \d\e F"|lower|capfirst }}</th><th class="num">Faltas acumuladas</th></tr></thead>
+    <tbody>{% for f in filas %}<tr><th scope="row">{{ f.matricula.estudiante }}</th>
+      <td><div class="opciones" role="radiogroup" aria-label="Asistencia de {{ f.matricula.estudiante }}">
+      {% for valor, etiqueta in estados %}<label class="op-{{ valor }}"><input type="radio" name="a_{{ f.matricula.pk }}" value="{{ valor }}"{% if f.estado == valor %} checked{% endif %}>{{ etiqueta }}</label>{% endfor %}</div></td>
+      <td class="num">{{ f.faltas }}</td></tr>{% endfor %}</tbody></table></div>
+  <div class="barra-guardar"><button class="enlace-boton" type="button" data-marcar-todos="P">Marcar que todos asistieron</button><button class="boton" type="submit">Guardar asistencia</button></div>
+  {% else %}<div class="panel vacio"><p>Este grupo no tiene estudiantes matriculados.</p></div>{% endif %}
+</form>
+<section class="panel"><div class="panel__cabeza"><h2>Últimos registros</h2></div>
+  <ul class="lista">{% for r in recientes %}<li><div class="lista__fila"><a href="?fecha={{ r.fecha|date:'Y-m-d' }}">{{ r.fecha|date:"D j \d\e F"|lower|capfirst }}</a>
+  <span class="lista__meta">{% if r.faltaron %}{{ r.faltaron }} falta{{ r.faltaron|pluralize }}{% else %}Sin faltas{% endif %}{% if r.tarde %}, {{ r.tarde }} tarde{% endif %}</span></div></li>
+  {% empty %}<li class="secundario">Aún no ha tomado asistencia en esta clase.</li>{% endfor %}</ul></section>
+</div>
+{% endblock %}

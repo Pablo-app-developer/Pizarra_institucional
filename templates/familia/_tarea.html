@@ -1,0 +1,14 @@
+<li><div class="lista__fila"><div>
+  <div class="lista__titulo">{{ t.titulo }}</div>
+  <div class="lista__meta">{{ t.clase.asignatura }}, {{ t.clase.docente.nombre_completo }}</div></div>
+  <div class="lista__lado">
+  {% if t.situacion == "pendiente" %}<span class="estado {% if t.dias <= 1 %}estado--aviso{% else %}estado--info{% endif %}">{% if t.dias == 0 %}Se entrega hoy{% elif t.dias == 1 %}Se entrega mañana{% else %}Faltan {{ t.dias }} días{% endif %}</span>
+  {% elif t.situacion == "entregada" %}<span class="estado estado--bien">Entregada</span>
+  {% elif t.situacion == "tarde" %}<span class="estado estado--aviso">Entregada tarde</span>
+  {% elif t.situacion == "no_entregada" %}<span class="estado estado--mal">No entregada</span>
+  {% else %}<span class="estado">Por revisar</span>{% endif %}
+  <div class="lista__meta">{{ t.fecha_entrega|date:"l j \d\e F"|lower|capfirst }}</div></div></div>
+  {% if detalle and t.descripcion %}<p style="margin-top:8px;max-width:75ch;white-space:pre-line">{{ t.descripcion }}</p>{% endif %}
+  {% if detalle and t.enlace %}<p class="pequeno" style="margin-top:6px"><a href="{{ t.enlace }}" target="_blank" rel="noopener noreferrer">Abrir material de apoyo</a></p>{% endif %}
+  {% if t.entrega.comentario %}<p class="pequeno" style="margin-top:6px"><strong>Comentario del docente:</strong> {{ t.entrega.comentario }}</p>{% endif %}
+</li>

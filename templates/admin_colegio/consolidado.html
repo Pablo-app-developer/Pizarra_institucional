@@ -1,0 +1,16 @@
+{% extends "base/base.html" %}{% load pizarra %}
+{% block titulo %}Consolidado de notas{% endblock %}
+{% block contenido %}
+<div class="encabezado"><div><h1>Consolidado de notas</h1><p class="encabezado__sub">Definitiva de cada asignatura por estudiante, con promedio y puesto.</p></div>
+<div class="encabezado__acciones"><button class="boton boton--secundario" type="button" onclick="window.print()">Imprimir</button></div></div>
+{% if not grupo or not periodo %}<div class="panel vacio"><p>Primero cree grupos y periodos en el año activo.</p></div>{% else %}
+{% include "admin_colegio/_filtro_grupo.html" %}
+<div class="tabla-envoltura"><table>
+  <thead><tr><th>Estudiante</th>{% for c in clases %}<th class="centro" title="{{ c.asignatura }}">{{ c.asignatura.nombre|truncatechars:12 }}</th>{% endfor %}<th class="centro">Promedio</th><th class="centro">Puesto</th><th class="centro">Pierde</th></tr></thead>
+  <tbody>{% for f in filas %}<tr class="fila-enlace"><th scope="row"><a href="{% url 'ficha_estudiante' f.matricula.estudiante.pk %}">{{ f.matricula.estudiante }}</a></th>
+    {% for n in f.notas %}<td class="centro">{% if n is None %}<span class="secundario">—</span>{% else %}{% desempeno n False %}{% endif %}</td>{% endfor %}
+    <td class="centro"><strong>{{ f.promedio|nota }}</strong></td><td class="centro">{{ f.puesto|default:"—" }}</td>
+    <td class="centro">{% if f.perdidas %}<span class="estado estado--mal">{{ f.perdidas }}</span>{% else %}0{% endif %}</td></tr>
+  {% empty %}<tr><td colspan="{{ clases|length|add:4 }}" class="vacio">Este grupo no tiene estudiantes matriculados.</td></tr>{% endfor %}</tbody>
+</table></div>{% endif %}
+{% endblock %}

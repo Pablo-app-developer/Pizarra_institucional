@@ -1,0 +1,8 @@
+{% extends "familia/_base.html" %}
+{% block familia %}
+<section class="panel"><div class="panel__cabeza"><h2>Boletines del año {{ matricula.grupo.anio.nombre }}</h2></div>
+<ul class="lista">{% for p in periodos %}<li><div class="lista__fila"><div><div class="lista__titulo">{{ p.nombre }}</div><div class="lista__meta">{{ p.fecha_inicio|date:"j \d\e F"|lower }} a {{ p.fecha_fin|date:"j \d\e F"|lower }}</div></div>
+{% if p.cerrado %}<a class="boton boton--secundario" href="{% url 'boletin_estudiante' matricula.pk p.pk %}" target="_blank" rel="noopener">Descargar boletín en PDF</a>
+{% else %}<span class="secundario pequeno">Disponible cuando el colegio cierre el periodo</span>{% endif %}</div></li>
+{% empty %}<li class="secundario">El colegio aún no ha definido los periodos.</li>{% endfor %}</ul></section>
+{% endblock %}
