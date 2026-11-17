@@ -1,0 +1,30 @@
+{% extends "base/base.html" %}
+{% block titulo %}Pensiones{% endblock %}
+{% block contenido %}
+<div class="encabezado"><div><h1>Pensiones</h1><p class="encabezado__sub">Cobros, pagos recibidos y cartera del año {{ anio.nombre }}.</p></div>
+{% if anio and totales.vencido %}<div class="encabezado__acciones"><form method="post" action="{% url 'recordar_mora' %}" data-confirmar="Se enviará un aviso a los acudientes de los estudiantes con saldo vencido. ¿Enviar?">{% csrf_token %}<button class="boton boton--secundario" type="submit">Recordar a quienes están en mora</button></form></div>{% endif %}</div>
+{% if not anio %}<div class="panel vacio"><p>No hay un año lectivo activo.</p></div>{% else %}
+<dl class="cifras">
+  <div class="cifra"><dt>Cobrado</dt><dd>$ {{ totales.cobrado|floatformat:"0g" }}</dd></div>
+  <div class="cifra"><dt>Recaudado</dt><dd>$ {{ totales.pagado|floatformat:"0g" }}</dd></div>
+  <div class="cifra"><dt>Por cobrar</dt><dd>$ {{ totales.saldo|floatformat:"0g" }}</dd></div>
+  <div class="cifra"><dt>Vencido</dt><dd>$ {{ totales.vencido|floatformat:"0g" }}</dd></div>
+</dl>
+<div class="rejilla rejilla--2">
+<div>
+<form class="filtros" method="get">
+  <div class="campo"><label for="f-grupo">Grupo</label><select id="f-grupo" name="grupo" data-autoenviar><option value="">Todos</option>{% for g in grupos %}<option value="{{ g.pk }}"{% if g == grupo %} selected{% endif %}>{{ g.nombre_largo }}</option>{% endfor %}</select></div>
+  <div class="campo"><label for="f-estado">Mostrar</label><select id="f-estado" name="estado" data-autoenviar><option value="">Todos los estudiantes</option><option value="mora"{% if solo_mora %} selected{% endif %}>Solo con saldo vencido</option></select></div>
+  <noscript><button class="boton boton--secundario">Ver</button></noscript></form>
+<div class="tabla-envoltura"><table class="personas"><thead><tr><th>Estudiante</th><th>Grupo</th><th class="num">Cobrado</th><th class="num">Pagado</th><th class="num">Saldo</th><th class="num">Vencido</th></tr></thead>
+<tbody>{% for f in filas %}<tr class="fila-enlace"><th scope="row"><a href="{% url 'cuenta_estudiante' f.matricula.estudiante_id %}">{{ f.matricula.estudiante }}</a></th><td>{{ f.matricula.grupo }}</td>
+<td class="dinero">$ {{ f.cobrado|floatformat:"0g" }}</td><td class="dinero">$ {{ f.pagado|floatformat:"0g" }}</td><td class="dinero">$ {{ f.saldo|floatformat:"0g" }}</td>
+<td class="dinero">{% if f.vencido > 0 %}<span class="estado estado--mal">$ {{ f.vencido|floatformat:"0g" }}</span>{% else %}<span class="secundario">Al día</span>{% endif %}</td></tr>
+{% empty %}<tr><td colspan="6" class="vacio">{% if solo_mora %}Nadie tiene saldo vencido.{% else %}No hay estudiantes matriculados.{% endif %}</td></tr>{% endfor %}</tbody></table></div>
+</div>
+<form method="post" action="{% url 'generar_cobros' %}" class="panel"><div class="panel__cabeza"><h2>Generar cobro para todos</h2></div><div class="panel__cuerpo">
+{% csrf_token %}{% include "base/_form.html" %}
+<button class="boton" type="submit">Generar cobros</button>
+<p class="campo__ayuda" style="margin-top:10px">Crea el cobro a cada estudiante matriculado con la pensión de su grado. Quien ya tenga un cobro con ese concepto no se duplica. El valor por grado se define en <a href="{% url 'gestion_lista' 'grados' %}">Grados</a>.</p></div></form>
+</div>{% endif %}
+{% endblock %}

@@ -1,9 +1,10 @@
 from datetime import timedelta
 
 from django.contrib import messages
+from django.core.exceptions import PermissionDenied
 from django.core.paginator import Paginator
 from django.db import transaction
-from django.db.models import Count, ProtectedError, Q
+from django.db.models import Count, ProtectedError, Q, Sum
 from django.http import Http404, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -13,11 +14,12 @@ from django.views.decorators.http import require_POST
 
 from .. import calculos, forms
 from ..importar import importar_estudiantes, plantilla_xlsx
+from ..avisos import avisar_comunicado
 from ..models import (
-    Acudiencia, AnioLectivo, Asignatura, Asistencia, Clase, Comunicado, Estudiante, Grado,
-    Grupo, Matricula, Nota, Periodo, Tarea, Usuario,
+    Acudiencia, AnioLectivo, Asignatura, Asistencia, Bloque, Clase, Cobro, Comunicado, Estudiante, Grado,
+    Grupo, Matricula, Nota, Pago, Periodo, Tarea, Usuario,
 )
-from ..permisos import directivo
+from ..permisos import capacidad, directivo
 from .comunes import periodo_vigente
 
 # --------------------------------------------------------------------------
@@ -32,6 +34,7 @@ def _grupo_de(est):
 
 ENTIDADES = {
     "estudiantes": dict(
+        capacidad="estudiantes",
         modelo=Estudiante, form=forms.EstudianteForm, singular="estudiante", plural="Estudiantes",
         nuevo="Nuevo estudiante",
         qs=lambda c: Estudiante.objects.filter(colegio=c),
@@ -44,6 +47,7 @@ ENTIDADES = {
         vacio="Aún no hay estudiantes. Créelos uno a uno o impórtelos desde Excel.",
     ),
     "docentes": dict(
+        capacidad="academico",
         modelo=Usuario, form=forms.DocenteForm, singular="docente", plural="Docentes",
         nuevo="Nuevo docente",
         qs=lambda c: Usuario.objects.filter(colegio=c, rol="docente").annotate(n=Count("clases")).order_by("last_name", "first_name"),
@@ -57,6 +61,7 @@ ENTIDADES = {
         vacio="Aún no hay docentes registrados.",
     ),
     "acudientes": dict(
+        capacidad="estudiantes",
         modelo=Usuario, form=forms.AcudienteForm, singular="acudiente", plural="Acudientes",
         nuevo="Nuevo acudiente",
         qs=lambda c: Usuario.objects.filter(colegio=c, rol="acudiente").prefetch_related("acudidos"),
@@ -70,6 +75,7 @@ ENTIDADES = {
         vacio="Los acudientes se crean aquí o desde la ficha de cada estudiante.",
     ),
     "anios": dict(
+        capacidad="academico",
         modelo=AnioLectivo, form=forms.AnioForm, singular="año lectivo", plural="Años lectivos",
         nuevo="Nuevo año lectivo", volver="configuracion",
         qs=lambda c: AnioLectivo.objects.filter(colegio=c),
@@ -77,6 +83,7 @@ ENTIDADES = {
         vacio="Cree el año lectivo para empezar.",
     ),
     "periodos": dict(
+        capacidad="academico",
         modelo=Periodo, form=forms.PeriodoForm, singular="periodo", plural="Periodos",
         nuevo="Nuevo periodo", volver="configuracion",
         qs=lambda c: Periodo.objects.filter(anio__colegio=c).select_related("anio"),
@@ -88,13 +95,19 @@ ENTIDADES = {
         vacio="Defina los periodos del año lectivo.",
     ),
     "grados": dict(
+        capacidad="academico",
         modelo=Grado, form=forms.GradoForm, singular="grado", plural="Grados",
         nuevo="Nuevo grado", volver="configuracion",
         qs=lambda c: Grado.objects.filter(colegio=c),
-        columnas=[("Grado", str), ("Abreviatura", lambda o: o.abreviatura), ("Orden", lambda o: o.orden)],
+        columnas=[
+            ("Grado", str), ("Abreviatura", lambda o: o.abreviatura), ("Orden", lambda o: o.orden),
+            ("Valoración", lambda o: "Descriptiva" if o.descriptivo else "Numérica"),
+            ("Pensión", lambda o: f"$ {o.pension:,.0f}".replace(",", ".") if o.pension else "—"),
+        ],
         vacio="Registre los grados que ofrece el colegio.",
     ),
     "asignaturas": dict(
+        capacidad="academico",
         modelo=Asignatura, form=forms.AsignaturaForm, singular="asignatura", plural="Asignaturas",
         nuevo="Nueva asignatura", volver="configuracion",
         qs=lambda c: Asignatura.objects.filter(colegio=c),
@@ -102,6 +115,7 @@ ENTIDADES = {
         vacio="Registre las asignaturas del plan de estudios.",
     ),
     "grupos": dict(
+        capacidad="academico",
         modelo=Grupo, form=forms.GrupoForm, singular="grupo", plural="Grupos",
         nuevo="Nuevo grupo", volver="grupos",
         qs=lambda c: Grupo.objects.filter(anio__colegio=c).select_related("grado", "anio", "director"),
@@ -112,6 +126,7 @@ ENTIDADES = {
         vacio="Cree los grupos del año lectivo.",
     ),
     "clases": dict(
+        capacidad="academico",
         modelo=Clase, form=forms.ClaseForm, singular="clase", plural="Clases",
         nuevo="Nueva clase", volver="grupos",
         qs=lambda c: Clase.objects.filter(grupo__anio__colegio=c, grupo__anio__activo=True).select_related(
@@ -119,11 +134,12 @@ ENTIDADES = {
         ),
         columnas=[
             ("Asignatura", lambda o: o.asignatura.nombre), ("Grupo", lambda o: str(o.grupo)),
-            ("Docente", lambda o: o.docente.nombre_completo), ("Horas", lambda o: o.horas_semanales),
+            ("Docente", lambda o: o.docente.nombre_completo if o.docente else "Sin asignar"), ("Horas", lambda o: o.horas_semanales),
         ],
         vacio="Asigne a cada grupo sus asignaturas y docentes.",
     ),
     "comunicados": dict(
+        capacidad="comunicados",
         modelo=Comunicado, form=forms.ComunicadoForm, singular="comunicado", plural="Comunicados",
         nuevo="Nuevo comunicado", volver="comunicados",
         qs=lambda c: Comunicado.objects.filter(colegio=c).select_related("grupo__grado"),
@@ -133,19 +149,46 @@ ENTIDADES = {
         ],
         vacio="Aún no se han publicado comunicados.",
     ),
+    "directivos": dict(
+        capacidad="configuracion",
+        modelo=Usuario, form=forms.DirectivoForm, singular="directivo", plural="Directivos",
+        nuevo="Nuevo directivo", volver="configuracion",
+        qs=lambda c: Usuario.objects.filter(colegio=c, rol="directivo").order_by("last_name", "first_name"),
+        columnas=[
+            ("Nombre", lambda o: o.nombre_completo), ("Documento", lambda o: o.documento),
+            ("Cargo", lambda o: o.get_cargo_display() or "Rectoría"),
+            ("Cuenta", lambda o: "Activa" if o.is_active else "Inactiva"),
+        ],
+        es_usuario=True,
+        vacio="Aún no hay otros directivos.",
+    ),
+    "bloques": dict(
+        capacidad="academico",
+        modelo=Bloque, form=forms.BloqueForm, singular="bloque", plural="Jornada escolar",
+        nuevo="Nuevo bloque", volver="horarios",
+        qs=lambda c: Bloque.objects.filter(colegio=c),
+        columnas=[
+            ("Bloque", lambda o: o.nombre), ("Horario", lambda o: f"{o.inicio:%H:%M} a {o.fin:%H:%M}"),
+            ("Tipo", lambda o: "Descanso" if o.descanso else "Clase"),
+        ],
+        vacio="Defina las horas de clase y los descansos de la jornada.",
+    ),
 }
 
 
-def _entidad(nombre):
+def _entidad(nombre, usuario):
     try:
-        return ENTIDADES[nombre]
+        conf = ENTIDADES[nombre]
     except KeyError:
         raise Http404
+    if not usuario.puede(conf["capacidad"]):
+        raise PermissionDenied("Su cargo no tiene acceso a esta sección.")
+    return conf
 
 
 @directivo
 def gestion_lista(request, entidad):
-    conf = _entidad(entidad)
+    conf = _entidad(entidad, request.user)
     qs = conf["qs"](request.user.colegio)
     q = request.GET.get("q", "").strip()
     if q and conf.get("buscar"):
@@ -173,15 +216,18 @@ def _despues_de_guardar(entidad, conf, obj):
 
 @directivo
 def gestion_form(request, entidad, pk=None):
-    conf = _entidad(entidad)
+    conf = _entidad(entidad, request.user)
     colegio = request.user.colegio
     obj = get_object_or_404(conf["qs"](colegio), pk=pk) if pk else None
     form = conf["form"](request.POST or None, instance=obj, colegio=colegio)
     if request.method == "POST" and form.is_valid():
         guardado = form.save(commit=False)
+        nuevo_comunicado = entidad == "comunicados" and obj is None
         if entidad == "comunicados" and not guardado.autor_id:
             guardado.autor = request.user
         guardado.save()
+        if nuevo_comunicado:
+            avisar_comunicado(guardado)
         if entidad == "estudiantes":
             forms.matricular(guardado, form.cleaned_data.get("grupo"))
         clave = getattr(form, "clave_generada", None)
@@ -204,7 +250,7 @@ def gestion_form(request, entidad, pk=None):
 @directivo
 @require_POST
 def gestion_eliminar(request, entidad, pk):
-    conf = _entidad(entidad)
+    conf = _entidad(entidad, request.user)
     obj = get_object_or_404(conf["qs"](request.user.colegio), pk=pk)
     if obj == request.user:
         messages.error(request, "No puede eliminar su propia cuenta.")
@@ -228,6 +274,9 @@ def gestion_eliminar(request, entidad, pk):
 @require_POST
 def restablecer_clave(request, pk):
     usuario = get_object_or_404(Usuario, pk=pk, colegio=request.user.colegio)
+    necesaria = {"directivo": "configuracion", "docente": "academico"}.get(usuario.rol, "estudiantes")
+    if not request.user.puede(necesaria):
+        raise PermissionDenied("Su cargo no puede restablecer la contraseña de esta cuenta.")
     clave = forms.clave_temporal()
     usuario.set_password(clave)
     usuario.debe_cambiar_clave = True
@@ -250,7 +299,8 @@ def restablecer_clave(request, pk):
 
 @directivo
 def panel(request):
-    colegio = request.user.colegio
+    u = request.user
+    colegio = u.colegio
     anio = colegio.anio_activo
     hoy = timezone.localdate()
     contexto = {"anio": anio, "hoy": hoy}
@@ -258,47 +308,54 @@ def panel(request):
         return render(request, "admin_colegio/panel.html", contexto)
 
     periodo = periodo_vigente(anio)
-    matriculas = Matricula.objects.filter(grupo__anio=anio, activa=True)
+    matriculas = list(Matricula.objects.filter(grupo__anio=anio, activa=True))
     semana = hoy - timedelta(days=7)
     asistencia = Asistencia.objects.filter(clase__grupo__anio=anio, fecha__gte=semana)
     total_asis = asistencia.count()
     faltas = asistencia.filter(estado__in=["A", "E"]).count()
 
-    grupos = []
-    for g in Grupo.objects.filter(anio=anio).select_related("grado", "director").annotate(
-        n=Count("matriculas", filter=Q(matriculas__activa=True))
-    ):
-        en_riesgo = 0
-        if periodo:
-            for m in g.matriculas.filter(activa=True):
-                filas, _, _ = calculos.resumen_estudiante(m, periodos=[periodo])
-                perdidas = sum(
-                    1 for f in filas
-                    if f["periodos"][periodo.id] is not None and f["periodos"][periodo.id] < colegio.desde_basico
-                )
-                if perdidas >= 2:
-                    en_riesgo += 1
-        grupos.append({"grupo": g, "estudiantes": g.n, "en_riesgo": en_riesgo})
+    # Todas las notas del periodo en dos consultas, sin importar el tamaño del colegio.
+    en_riesgo = {}
+    if periodo and u.puede("academico"):
+        datos, _ = calculos.consolidar(matriculas, [periodo], colegio)
+        for m in matriculas:
+            if calculos.perdidas(datos[m.id], colegio, periodo) >= 2:
+                en_riesgo[m.grupo_id] = en_riesgo.get(m.grupo_id, 0) + 1
+    por_grupo = {}
+    for m in matriculas:
+        por_grupo[m.grupo_id] = por_grupo.get(m.grupo_id, 0) + 1
+    grupos = [
+        {"grupo": g, "estudiantes": por_grupo.get(g.id, 0), "en_riesgo": en_riesgo.get(g.id, 0)}
+        for g in Grupo.objects.filter(anio=anio).select_related("grado", "director")
+    ]
 
     # Clases sin ninguna nota en el periodo vigente: lo que coordinación debe perseguir.
     sin_notas = []
-    if periodo and not periodo.cerrado:
+    if periodo and not periodo.cerrado and u.puede("academico"):
         con_notas = set(
             Nota.objects.filter(actividad__periodo=periodo).values_list("actividad__clase_id", flat=True)
         )
         sin_notas = list(
-            Clase.objects.filter(grupo__anio=anio).exclude(id__in=con_notas)
+            Clase.objects.filter(grupo__anio=anio, grupo__grado__descriptivo=False).exclude(id__in=con_notas)
             .select_related("grupo__grado", "asignatura", "docente")[:8]
         )
 
+    cartera = None
+    if u.puede("pensiones"):
+        vencidos = Cobro.objects.filter(anio=anio, vence__lt=hoy)
+        cobrado = vencidos.aggregate(t=Sum("valor"))["t"] or 0
+        pagado = Pago.objects.filter(cobro__in=vencidos).aggregate(t=Sum("valor"))["t"] or 0
+        cartera = cobrado - pagado
+
     contexto.update({
         "periodo": periodo,
-        "n_estudiantes": matriculas.count(),
+        "n_estudiantes": len(matriculas),
         "n_docentes": Usuario.objects.filter(colegio=colegio, rol="docente", is_active=True).count(),
         "n_grupos": len(grupos),
         "inasistencia": round(faltas * 100 / total_asis, 1) if total_asis else None,
         "grupos": grupos,
         "sin_notas": sin_notas,
+        "cartera": cartera,
         "tareas_semana": Tarea.objects.filter(
             clase__grupo__anio=anio, fecha_entrega__gte=hoy, fecha_entrega__lte=hoy + timedelta(days=7)
         ).count(),
@@ -312,7 +369,7 @@ def panel(request):
 # --------------------------------------------------------------------------
 
 
-@directivo
+@capacidad("academico")
 def grupos(request):
     anio = request.user.colegio.anio_activo
     lista = []
@@ -327,7 +384,7 @@ def grupos(request):
     return render(request, "admin_colegio/grupos.html", {"anio": anio, "grupos": lista})
 
 
-@directivo
+@capacidad("estudiantes")
 def ficha_estudiante(request, pk):
     colegio = request.user.colegio
     est = get_object_or_404(Estudiante, pk=pk, colegio=colegio)
@@ -375,7 +432,7 @@ def ficha_estudiante(request, pk):
     return render(request, "admin_colegio/ficha_estudiante.html", contexto)
 
 
-@directivo
+@capacidad("estudiantes")
 @require_POST
 def desvincular_acudiente(request, pk):
     ac = get_object_or_404(Acudiencia, pk=pk, estudiante__colegio=request.user.colegio)
@@ -385,24 +442,27 @@ def desvincular_acudiente(request, pk):
     return redirect("ficha_estudiante", est_id)
 
 
-@directivo
+@capacidad("configuracion", "academico")
 def configuracion(request):
     colegio = request.user.colegio
-    form = forms.ColegioForm(request.POST or None, instance=colegio)
-    if request.method == "POST" and form.is_valid():
-        form.save()
-        messages.success(request, "Se guardaron los datos del colegio.")
-        return redirect("configuracion")
+    form = None
+    if request.user.puede("configuracion"):
+        form = forms.ColegioForm(request.POST or None, request.FILES or None, instance=colegio)
+        if request.method == "POST" and form.is_valid():
+            form.save()
+            messages.success(request, "Se guardaron los datos del colegio.")
+            return redirect("configuracion")
     return render(request, "admin_colegio/configuracion.html", {
         "form": form,
         "anios": AnioLectivo.objects.filter(colegio=colegio),
         "periodos": Periodo.objects.filter(anio__colegio=colegio, anio__activo=True),
         "grados": Grado.objects.filter(colegio=colegio),
         "asignaturas": Asignatura.objects.filter(colegio=colegio),
+        "directivos": Usuario.objects.filter(colegio=colegio, rol="directivo").count(),
     })
 
 
-@directivo
+@capacidad("academico")
 @require_POST
 def alternar_periodo(request, pk):
     periodo = get_object_or_404(Periodo, pk=pk, anio__colegio=request.user.colegio)
@@ -422,7 +482,7 @@ def alternar_periodo(request, pk):
 # --------------------------------------------------------------------------
 
 
-@directivo
+@capacidad("estudiantes")
 def importar(request):
     form = forms.ImportarForm(request.POST or None, request.FILES or None)
     resultado = None
@@ -431,7 +491,7 @@ def importar(request):
     return render(request, "admin_colegio/importar.html", {"form": form, "resultado": resultado})
 
 
-@directivo
+@capacidad("estudiantes")
 def plantilla_importacion(request):
     respuesta = HttpResponse(
         plantilla_xlsx(),
@@ -458,21 +518,22 @@ def _seleccion(request):
     return anio, grupos_qs, periodos, grupo, periodo
 
 
-@directivo
+@capacidad("academico")
 def consolidado(request):
     anio, grupos_qs, periodos, grupo, periodo = _seleccion(request)
     filas, clases = [], []
+    colegio = request.user.colegio
     if grupo and periodo:
-        clases = list(grupo.clases.select_related("asignatura"))
-        puestos, _ = calculos.puestos_del_grupo(grupo, periodo)
-        for m in grupo.matriculas.filter(activa=True).select_related("estudiante"):
-            detalle, proms, _ = calculos.resumen_estudiante(m, periodos=[periodo])
-            por_clase = {f["clase"].id: f["periodos"][periodo.id] for f in detalle}
-            notas = [por_clase.get(c.id) for c in clases]
+        matriculas = list(grupo.matriculas.filter(activa=True).select_related("estudiante"))
+        datos, clases_por_grupo = calculos.consolidar(matriculas, [periodo], colegio)
+        clases = clases_por_grupo[grupo.id]
+        puestos, _ = calculos.puestos({m.id: datos[m.id]["promedios"][periodo.id] for m in matriculas})
+        for m in matriculas:
             filas.append({
-                "matricula": m, "notas": notas, "promedio": proms[periodo.id],
-                "puesto": puestos.get(m.id),
-                "perdidas": sum(1 for n in notas if n is not None and n < request.user.colegio.desde_basico),
+                "matricula": m,
+                "notas": [datos[m.id]["clases"][c.id]["periodos"][periodo.id] for c in clases],
+                "promedio": datos[m.id]["promedios"][periodo.id], "puesto": puestos.get(m.id),
+                "perdidas": calculos.perdidas(datos[m.id], colegio, periodo),
             })
     return render(request, "admin_colegio/consolidado.html", {
         "grupos": grupos_qs, "periodos": periodos, "grupo": grupo, "periodo": periodo,
@@ -480,7 +541,7 @@ def consolidado(request):
     })
 
 
-@directivo
+@capacidad("boletines")
 def boletines(request):
     anio, grupos_qs, periodos, grupo, periodo = _seleccion(request)
     matriculas = (

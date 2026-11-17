@@ -1,0 +1,8 @@
+{% extends "base/base.html" %}
+{% block titulo %}Registrar pago{% endblock %}
+{% block contenido %}
+<div class="encabezado"><div><p class="miga"><a href="{% url 'cuenta_estudiante' cobro.estudiante_id %}">Estado de cuenta</a> /</p><h1>Registrar pago</h1>
+<p class="encabezado__sub">{{ cobro.concepto }} de {{ cobro.estudiante.nombre_natural }}. Saldo pendiente: $ {{ saldo|floatformat:"0g" }}</p></div></div>
+<form method="post" class="panel formulario" novalidate><div class="panel__cuerpo">{% csrf_token %}{% include "base/_form.html" %}
+<div class="formulario__pie"><button class="boton" type="submit">Registrar pago</button><a href="{% url 'cuenta_estudiante' cobro.estudiante_id %}">Cancelar</a></div></div></form>
+{% endblock %}

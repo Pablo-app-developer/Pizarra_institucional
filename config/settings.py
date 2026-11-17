@@ -110,3 +110,23 @@ if not DEBUG:
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
     SECURE_HSTS_SECONDS = 60 * 60 * 24 * 30
+
+# Correo: recuperar contraseña y avisos a las familias. Sin EMAIL_HOST no se envía nada
+# en producción; en desarrollo los mensajes se imprimen en la consola.
+EMAIL_HOST = os.environ.get("EMAIL_HOST", "")
+EMAIL_PORT = int(os.environ.get("EMAIL_PORT", "587"))
+EMAIL_HOST_USER = os.environ.get("EMAIL_HOST_USER", "")
+EMAIL_HOST_PASSWORD = os.environ.get("EMAIL_HOST_PASSWORD", "")
+EMAIL_USE_TLS = os.environ.get("EMAIL_USE_TLS", "1") == "1"
+EMAIL_TIMEOUT = 15
+DEFAULT_FROM_EMAIL = os.environ.get("DEFAULT_FROM_EMAIL", EMAIL_HOST_USER or "pizarra@localhost")
+CORREO_ACTIVO = bool(EMAIL_HOST) or DEBUG
+if EMAIL_HOST:
+    EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
+elif DEBUG:
+    EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
+else:
+    EMAIL_BACKEND = "django.core.mail.backends.dummy.EmailBackend"
+PASSWORD_RESET_TIMEOUT = 60 * 60 * 2  # el enlace de recuperación vale dos horas
+
+DATA_UPLOAD_MAX_MEMORY_SIZE = 12 * 1024 * 1024

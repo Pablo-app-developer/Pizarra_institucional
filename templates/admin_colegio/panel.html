@@ -4,8 +4,8 @@
 <div class="encabezado">
   <div><h1>{{ colegio.nombre }}</h1>
   <p class="encabezado__sub">{% if anio %}Año lectivo {{ anio.nombre }}{% if periodo %}, {{ periodo.nombre|lower }}{% if periodo.cerrado %} (cerrado){% endif %}{% endif %}{% else %}Sin año lectivo activo{% endif %}</p></div>
-  <div class="encabezado__acciones"><a class="boton boton--secundario" href="{% url 'importar' %}">Importar desde Excel</a>
-  <a class="boton" href="{% url 'gestion_nuevo' 'estudiantes' %}">Nuevo estudiante</a></div>
+  {% if user.es_directivo and "estudiantes" in capacidades %}<div class="encabezado__acciones"><a class="boton boton--secundario" href="{% url 'importar' %}">Importar desde Excel</a>
+  <a class="boton" href="{% url 'gestion_nuevo' 'estudiantes' %}">Nuevo estudiante</a></div>{% endif %}
 </div>
 {% if not anio %}
 <div class="panel vacio"><p><strong>Para empezar, cree el año lectivo y sus periodos.</strong></p>
@@ -17,19 +17,20 @@
   <div class="cifra"><dt>Grupos</dt><dd>{{ n_grupos }}</dd></div>
   <div class="cifra"><dt>Docentes</dt><dd>{{ n_docentes }}</dd></div>
   <div class="cifra"><dt>Inasistencia, últimos 7 días</dt><dd>{% if inasistencia is None %}<small>Sin registros</small>{% else %}{{ inasistencia }} %{% endif %}</dd></div>
-  <div class="cifra"><dt>Tareas por entregar esta semana</dt><dd>{{ tareas_semana }}</dd></div>
+  {% if cartera is not None %}<div class="cifra"><dt>Cartera vencida</dt><dd>$ {{ cartera|floatformat:"0g" }}</dd></div>
+  {% else %}<div class="cifra"><dt>Tareas por entregar esta semana</dt><dd>{{ tareas_semana }}</dd></div>{% endif %}
 </dl>
 <div class="rejilla rejilla--2">
   <section class="panel">
-    <div class="panel__cabeza"><h2>Grupos</h2><a href="{% url 'grupos' %}">Administrar grupos y clases</a></div>
+    <div class="panel__cabeza"><h2>Grupos</h2>{% if "academico" in capacidades %}<a href="{% url 'grupos' %}">Administrar grupos y clases</a>{% endif %}</div>
     <div class="tabla-envoltura"><table>
-      <thead><tr><th>Grupo</th><th>Director(a)</th><th class="num">Estudiantes</th><th class="num">Pierden 2 o más asignaturas</th><th></th></tr></thead>
+      <thead><tr><th>Grupo</th><th>Director(a)</th><th class="num">Estudiantes</th>{% if "academico" in capacidades %}<th class="num">Pierden 2 o más asignaturas</th><th></th>{% endif %}</tr></thead>
       <tbody>{% for g in grupos %}<tr>
         <th scope="row"><strong>{{ g.grupo.nombre_largo }}</strong></th>
         <td>{{ g.grupo.director.nombre_completo|default:"Sin asignar" }}</td>
         <td class="num">{{ g.estudiantes }}</td>
-        <td class="num">{% if g.en_riesgo %}<span class="estado estado--mal">{{ g.en_riesgo }}</span>{% else %}0{% endif %}</td>
-        <td class="num"><a href="{% url 'consolidado' %}?grupo={{ g.grupo.pk }}">Ver notas</a></td>
+        {% if "academico" in capacidades %}<td class="num">{% if g.en_riesgo %}<span class="estado estado--mal">{{ g.en_riesgo }}</span>{% else %}0{% endif %}</td>
+        <td class="num"><a href="{% url 'consolidado' %}?grupo={{ g.grupo.pk }}">Ver notas</a></td>{% endif %}
       </tr>{% empty %}<tr><td colspan="5" class="vacio">Aún no hay grupos en este año.</td></tr>{% endfor %}</tbody>
     </table></div>
   </section>

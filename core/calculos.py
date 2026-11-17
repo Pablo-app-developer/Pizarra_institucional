@@ -1,8 +1,12 @@
-"""Cálculo de notas. Toda la aritmética académica vive aquí para poder probarla."""
+"""Cálculo de notas. Toda la aritmética académica vive aquí para poder probarla.
+
+Las funciones de grupo traen las notas en pocas consultas, sin importar cuántos
+estudiantes haya: un colegio de 500 estudiantes cuesta lo mismo que uno de 50.
+"""
 from collections import defaultdict
 from decimal import ROUND_HALF_UP, Decimal
 
-from .models import Actividad, Asistencia, Nota
+from .models import Actividad, Asistencia, Clase, Nota, Recuperacion
 
 UNA_DECIMAL = Decimal("0.1")
 
@@ -29,10 +33,21 @@ def promedio_ponderado(pares):
     return redondear(sum(v * p for v, p in pares) / total_peso)
 
 
+def aplicar_recuperacion(original, recuperacion, tope):
+    """La recuperación reemplaza la nota del periodo solo si la mejora, y hasta el tope del colegio."""
+    if recuperacion is None:
+        return original
+    efectiva = min(recuperacion, tope) if tope is not None else recuperacion
+    if original is None or efectiva > original:
+        return efectiva
+    return original
+
+
 def notas_de_clase(clase, periodo):
     """Planilla de una clase en un periodo.
 
     Devuelve (actividades, {matricula_id: {actividad_id: valor}}, {matricula_id: definitiva}).
+    La definitiva aquí es la de las actividades, sin recuperación.
     """
     actividades = list(Actividad.objects.filter(clase=clase, periodo=periodo))
     por_matricula = defaultdict(dict)
@@ -45,56 +60,118 @@ def notas_de_clase(clase, periodo):
     return actividades, por_matricula, definitivas
 
 
+def tabla_notas(matricula_ids, periodos, colegio):
+    """{(matricula_id, clase_id, periodo_id): nota del periodo}, con recuperaciones aplicadas.
+
+    Dos consultas en total.
+    """
+    periodo_ids = [p.id for p in periodos]
+    pares = defaultdict(list)
+    filas = Nota.objects.filter(
+        matricula_id__in=matricula_ids, actividad__periodo_id__in=periodo_ids
+    ).values_list("matricula_id", "actividad__clase_id", "actividad__periodo_id", "valor", "actividad__peso")
+    for m_id, clase_id, periodo_id, valor, peso in filas:
+        pares[(m_id, clase_id, periodo_id)].append((valor, peso))
+    tabla = {clave: promedio_ponderado(lista) for clave, lista in pares.items()}
+
+    tope = colegio.tope_recuperacion
+    for m_id, clase_id, periodo_id, valor in Recuperacion.objects.filter(
+        matricula_id__in=matricula_ids, periodo_id__in=periodo_ids
+    ).values_list("matricula_id", "clase_id", "periodo_id", "valor"):
+        clave = (m_id, clase_id, periodo_id)
+        tabla[clave] = aplicar_recuperacion(tabla.get(clave), valor, tope)
+    return tabla
+
+
+def consolidar(matriculas, periodos, colegio):
+    """Notas de muchas matrículas a la vez.
+
+    Devuelve {matricula_id: {"clases": {clase_id: {"periodos": {pid: nota}, "final": nota}},
+                             "promedios": {pid: nota}, "final": nota}}
+    y {grupo_id: [clases]}.
+    """
+    matriculas = list(matriculas)
+    tabla = tabla_notas([m.id for m in matriculas], periodos, colegio)
+    clases_por_grupo = defaultdict(list)
+    for clase in Clase.objects.filter(grupo_id__in={m.grupo_id for m in matriculas}).select_related(
+        "asignatura", "docente"
+    ):
+        clases_por_grupo[clase.grupo_id].append(clase)
+
+    resultado = {}
+    for m in matriculas:
+        clases = {}
+        for clase in clases_por_grupo[m.grupo_id]:
+            por_periodo = {p.id: tabla.get((m.id, clase.id, p.id)) for p in periodos}
+            clases[clase.id] = {
+                "periodos": por_periodo,
+                "final": promedio_ponderado([(por_periodo[p.id], p.peso) for p in periodos]),
+            }
+        resultado[m.id] = {
+            "clases": clases,
+            "promedios": {
+                p.id: promedio_ponderado([(c["periodos"][p.id], 1) for c in clases.values()]) for p in periodos
+            },
+            "final": promedio_ponderado([(c["final"], 1) for c in clases.values()]),
+        }
+    return resultado, clases_por_grupo
+
+
 def resumen_estudiante(matricula, periodos=None):
     """Notas de un estudiante en todas sus clases.
 
-    Devuelve una lista de filas, una por clase:
+    Devuelve (filas, promedios por periodo, promedio final). Cada fila:
     {clase, periodos: {periodo_id: nota}, final, faltas}
-    y un dict de promedios generales por periodo.
     """
     grupo = matricula.grupo
     periodos = periodos if periodos is not None else list(grupo.anio.periodos.all())
-    clases = list(grupo.clases.select_related("asignatura", "docente"))
-
-    acumulado = defaultdict(list)  # (clase_id, periodo_id) -> [(valor, peso)]
-    notas = Nota.objects.filter(matricula=matricula).select_related("actividad")
-    for n in notas:
-        acumulado[(n.actividad.clase_id, n.actividad.periodo_id)].append((n.valor, n.actividad.peso))
+    datos, clases_por_grupo = consolidar([matricula], periodos, grupo.anio.colegio)
+    propio = datos[matricula.id]
 
     faltas = defaultdict(int)
-    for a in Asistencia.objects.filter(
+    for clase_id in Asistencia.objects.filter(
         matricula=matricula, estado__in=[Asistencia.Estado.AUSENTE, Asistencia.Estado.EXCUSA]
-    ):
-        faltas[a.clase_id] += 1
+    ).values_list("clase_id", flat=True):
+        faltas[clase_id] += 1
 
-    filas = []
-    for clase in clases:
-        por_periodo = {p.id: promedio_ponderado(acumulado.get((clase.id, p.id), [])) for p in periodos}
-        final = promedio_ponderado([(por_periodo[p.id], p.peso) for p in periodos])
-        filas.append({"clase": clase, "periodos": por_periodo, "final": final, "faltas": faltas[clase.id]})
+    filas = [
+        {
+            "clase": clase, "periodos": propio["clases"][clase.id]["periodos"],
+            "final": propio["clases"][clase.id]["final"], "faltas": faltas[clase.id],
+        }
+        for clase in clases_por_grupo[grupo.id]
+    ]
+    return filas, propio["promedios"], propio["final"]
 
-    promedios = {
-        p.id: promedio_ponderado([(f["periodos"][p.id], 1) for f in filas]) for p in periodos
-    }
-    promedio_final = promedio_ponderado([(f["final"], 1) for f in filas])
-    return filas, promedios, promedio_final
+
+def puestos(promedios):
+    """{id: promedio} -> ({id: puesto}, cuántos tienen promedio). Empates comparten puesto."""
+    ordenados = sorted(((i, p) for i, p in promedios.items() if p is not None), key=lambda par: par[1], reverse=True)
+    resultado, anterior, puesto = {}, None, 0
+    for indice, (identificador, promedio) in enumerate(ordenados, start=1):
+        if promedio != anterior:
+            puesto, anterior = indice, promedio
+        resultado[identificador] = puesto
+    return resultado, len(ordenados)
 
 
 def puestos_del_grupo(grupo, periodo):
     """Puesto de cada matrícula en el grupo según el promedio del periodo."""
-    promedios = {}
-    for m in grupo.matriculas.filter(activa=True):
-        _, proms, _ = resumen_estudiante(m, periodos=[periodo])
-        if proms[periodo.id] is not None:
-            promedios[m.id] = proms[periodo.id]
-    ordenados = sorted(promedios.items(), key=lambda par: par[1], reverse=True)
-    puestos, anterior, puesto = {}, None, 0
-    for indice, (m_id, prom) in enumerate(ordenados, start=1):
-        if prom != anterior:
-            puesto = indice
-            anterior = prom
-        puestos[m_id] = puesto
-    return puestos, len(ordenados)
+    matriculas = list(grupo.matriculas.filter(activa=True))
+    for m in matriculas:
+        m.grupo = grupo
+    datos, _ = consolidar(matriculas, [periodo], grupo.anio.colegio)
+    return puestos({m_id: d["promedios"][periodo.id] for m_id, d in datos.items()})
+
+
+def perdidas(datos_matricula, colegio, periodo=None):
+    """Cuántas asignaturas va perdiendo: en un periodo, o en el acumulado del año si periodo es None."""
+    total = 0
+    for clase in datos_matricula["clases"].values():
+        nota = clase["periodos"][periodo.id] if periodo else clase["final"]
+        if nota is not None and nota < colegio.desde_basico:
+            total += 1
+    return total
 
 
 def resumen_asistencia(matricula, desde=None, hasta=None):

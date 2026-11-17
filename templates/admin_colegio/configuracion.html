@@ -3,10 +3,11 @@
 {% block contenido %}
 <div class="encabezado"><div><h1>Configuración</h1><p class="encabezado__sub">Datos del colegio, escala de valoración y estructura académica.</p></div></div>
 <div class="rejilla rejilla--mitades">
-  <form method="post" class="panel" novalidate><div class="panel__cabeza"><h2>Datos del colegio y escala</h2></div><div class="panel__cuerpo">
+  {% if form %}<form method="post" enctype="multipart/form-data" class="panel" novalidate><div class="panel__cabeza"><h2>Identidad, datos y escala</h2>
+    {% if colegio.escudo_tipo %}<img src="{% url 'escudo' colegio.pk %}?v={{ colegio.escudo_version }}" alt="Escudo actual" style="height:52px">{% endif %}</div><div class="panel__cuerpo">
     {% csrf_token %}{% include "base/_form.html" %}
     <button class="boton" type="submit">Guardar datos del colegio</button>
-  </div></form>
+  </div></form>{% else %}<div class="panel vacio"><p>Los datos del colegio, el escudo y la escala de valoración los administra rectoría.</p></div>{% endif %}
   <div class="apilado">
     <section class="panel"><div class="panel__cabeza"><h2>Periodos del año activo</h2><a href="{% url 'gestion_lista' 'periodos' %}">Administrar</a></div>
       <ul class="lista">{% for p in periodos %}<li><div class="lista__fila"><div><div class="lista__titulo">{{ p.nombre }} <span class="estado {% if p.cerrado %}estado--mal{% else %}estado--bien{% endif %}">{% if p.cerrado %}Cerrado{% else %}Abierto{% endif %}</span></div>
@@ -19,7 +20,11 @@
         <li><div class="lista__fila"><span><span class="lista__titulo">Grados</span> <span class="lista__meta">{{ grados|length }}</span></span><a href="{% url 'gestion_lista' 'grados' %}">Administrar</a></div></li>
         <li><div class="lista__fila"><span><span class="lista__titulo">Asignaturas</span> <span class="lista__meta">{{ asignaturas|length }}</span></span><a href="{% url 'gestion_lista' 'asignaturas' %}">Administrar</a></div></li>
         <li><div class="lista__fila"><span class="lista__titulo">Grupos y clases</span><a href="{% url 'grupos' %}">Administrar</a></div></li>
+        <li><div class="lista__fila"><span class="lista__titulo">Jornada escolar y horarios</span><a href="{% url 'horarios' %}">Administrar</a></div></li>
+        <li><div class="lista__fila"><span><span class="lista__titulo">Cierre de año</span><br><span class="lista__meta">Promoción de estudiantes y creación del año siguiente</span></span><a href="{% url 'cierre' %}">Abrir</a></div></li>
       </ul></section>
+    {% if form %}<section class="panel"><div class="panel__cabeza"><h2>Equipo directivo</h2></div>
+      <ul class="lista"><li><div class="lista__fila"><span><span class="lista__titulo">Rectoría, coordinación y secretaría</span><br><span class="lista__meta">{{ directivos }} cuenta{{ directivos|pluralize }}. Cada cargo ve solo lo que le corresponde.</span></span><a href="{% url 'gestion_lista' 'directivos' %}">Administrar</a></div></li></ul></section>{% endif %}
   </div>
 </div>
 {% endblock %}

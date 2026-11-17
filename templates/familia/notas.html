@@ -1,13 +1,22 @@
 {% extends "familia/_base.html" %}{% load pizarra %}
 {% block familia %}
 {% include "familia/_periodos.html" %}
+{% if descriptivo %}
+<section class="panel"><div class="panel__cabeza"><h2>{{ periodo.nombre }}</h2></div>
+<ul class="lista">{% for f in filas %}<li><div class="lista__titulo">{{ f.clase.asignatura }}</div><div class="lista__meta">{{ f.clase.docente.nombre_completo }}</div>
+{% if f.valoracion %}<p style="margin-top:6px;max-width:75ch;white-space:pre-line">{{ f.valoracion }}</p>{% else %}<p class="secundario" style="margin-top:6px">El docente aún no ha escrito la valoración de este periodo.</p>{% endif %}</li>{% endfor %}</ul></section>
+{% else %}
 <section class="panel"><div class="panel__cabeza"><h2>{{ periodo.nombre }}</h2><span>Promedio {% desempeno promedio %}</span></div>
 {% for f in filas %}<details class="detalle"><summary><span><span class="lista__titulo">{{ f.clase.asignatura }}</span><br><span class="lista__meta">{{ f.clase.docente.nombre_completo }}</span></span><span style="margin-left:auto">{% desempeno f.nota %}</span></summary>
   <div class="tabla-envoltura">{% if f.actividades %}<table><thead><tr><th>Actividad</th><th>Fecha</th><th class="num">Peso</th><th class="num">Nota</th></tr></thead>
   <tbody>{% for a in f.actividades %}<tr><th scope="row">{{ a.actividad.titulo }}<div class="lista__meta">{{ a.actividad.get_tipo_display }}</div></th><td>{{ a.actividad.fecha|date:"j \d\e F"|lower }}</td>
   <td class="num">{% if a.actividad.peso %}{{ a.actividad.peso|floatformat:"-2" }} %{% else %}<span class="secundario">Igual</span>{% endif %}</td>
   <td class="num">{% if a.valor is None %}<span class="secundario">Sin calificar</span>{% else %}{% desempeno a.valor False %}{% endif %}</td></tr>{% endfor %}</tbody></table>
-  {% else %}<p class="vacio">El docente aún no ha registrado actividades en este periodo.</p>{% endif %}</div></details>{% endfor %}
-</section>
+  {% else %}<p class="vacio">El docente aún no ha registrado actividades en este periodo.</p>{% endif %}
+  {% if f.recuperacion is not None or f.logros %}<div style="padding:12px 16px">
+  {% if f.recuperacion is not None %}<p class="pequeno"><strong>Recuperación:</strong> presentó recuperación y obtuvo {{ f.recuperacion|nota }}. La nota del periodo queda en {{ f.nota|nota }}.</p>{% endif %}
+  {% if f.logros %}<p class="pequeno" style="margin-top:6px"><strong>Lo que se trabaja este periodo</strong></p><ul class="logros">{% for l in f.logros %}<li>{{ l }}</li>{% endfor %}</ul>{% endif %}</div>{% endif %}
+  </div></details>{% endfor %}
+</section>{% endif %}
 <p class="campo__ayuda" style="margin-top:12px">Escala del colegio: Bajo, menos de {{ colegio.desde_basico }}. Básico, desde {{ colegio.desde_basico }}. Alto, desde {{ colegio.desde_alto }}. Superior, desde {{ colegio.desde_superior }}.</p>
 {% endblock %}

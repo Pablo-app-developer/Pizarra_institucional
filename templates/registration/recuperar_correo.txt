@@ -1,0 +1,9 @@
+Hola, {{ user.first_name }}:
+
+Recibimos una solicitud para cambiar la contraseña de su cuenta en la plataforma del colegio.
+Su usuario es: {{ user.username }}
+
+Abra este enlace para crear una contraseña nueva (sirve durante dos horas):
+{{ protocol }}://{{ domain }}{% url 'password_reset_confirm' uidb64=uid token=token %}
+
+Si usted no la pidió, ignore este mensaje: su contraseña sigue igual.

@@ -1,0 +1,17 @@
+{% extends "base/base.html" %}
+{% block titulo %}Recibo de pago{% endblock %}
+{% block contenido %}
+<div class="encabezado no-imprimir"><div><h1>Recibo de pago</h1></div><div class="encabezado__acciones"><button class="boton" type="button" onclick="window.print()">Imprimir</button>
+{% if "pensiones" in capacidades %}<a class="boton boton--secundario" href="{% url 'cuenta_estudiante' est.pk %}">Volver al estado de cuenta</a>{% endif %}</div></div>
+<section class="panel recibo"><div class="panel__cabeza"><div><h2>{{ colegio.nombre }}</h2><p class="pequeno secundario">{% if colegio.nit %}NIT {{ colegio.nit }}. {% endif %}{{ colegio.direccion }} {{ colegio.ciudad }}</p></div>
+{% if colegio.escudo_tipo %}<img src="{% url 'escudo' colegio.pk %}?v={{ colegio.escudo_version }}" alt="" style="height:60px">{% endif %}</div>
+<div class="panel__cuerpo"><dl class="definiciones">
+<dt>Recibo número</dt><dd>{{ pago.pk|stringformat:"06d" }}</dd>
+<dt>Fecha</dt><dd>{{ pago.fecha|date:"j \d\e F \d\e Y"|lower }}</dd>
+<dt>Estudiante</dt><dd>{{ est.nombre_natural }}, {{ est.tipo_documento }} {{ est.documento }}</dd>
+<dt>Concepto</dt><dd>{{ pago.cobro.concepto }}, año {{ pago.cobro.anio.nombre }}</dd>
+<dt>Medio de pago</dt><dd>{{ pago.get_medio_display }}{% if pago.referencia %}, referencia {{ pago.referencia }}{% endif %}</dd>
+<dt>Valor recibido</dt><dd><strong style="font-size:var(--t-l)">$ {{ pago.valor|floatformat:"0g" }}</strong></dd>
+<dt>Recibió</dt><dd>{{ pago.registrado_por.nombre_completo|default:"Colegio" }}</dd></dl>
+<p class="campo__ayuda" style="margin-top:18px">Este recibo es una constancia interna del colegio y no reemplaza la factura.</p></div></section>
+{% endblock %}

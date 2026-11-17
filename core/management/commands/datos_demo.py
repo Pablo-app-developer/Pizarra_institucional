@@ -13,13 +13,58 @@ from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 from django.utils import timezone
 
+from core import horarios
 from core.models import (
-    Actividad, Acudiencia, AnioLectivo, Asignatura, Asistencia, Clase, Colegio, ComentarioBoletin,
-    Comunicado, Entrega, Estudiante, Grado, Grupo, Matricula, Nota, Observacion, Periodo, Tarea, Usuario,
+    Actividad, Acudiencia, AnioLectivo, Asignatura, Asistencia, Bloque, Clase, Cobro, Colegio, ComentarioBoletin,
+    Comunicado, Entrega, Estudiante, Grado, Grupo, Logro, Matricula, Nota, Observacion, Pago, Periodo,
+    PlanEstudio, Recuperacion, Tarea, Usuario, ValoracionDescriptiva,
 )
 
 NOMBRE = "Colegio Los Arrayanes"
 CLAVE = "pizarra2026"
+VERSION = 2  # súbalo cuando cambie el contenido del ejemplo: --actualizar lo recrea
+
+LOGROS = {
+    "Matemáticas": ["Resuelve problemas con fracciones y decimales en contextos cotidianos.", "Plantea y soluciona ecuaciones de primer grado.", "Interpreta tablas y gráficas estadísticas.", "Calcula áreas y perímetros de figuras planas."],
+    "Lengua castellana": ["Comprende textos narrativos e identifica su estructura.", "Escribe textos argumentativos con tesis y razones.", "Expone oralmente con claridad sobre una lectura.", "Aplica las reglas ortográficas en sus escritos."],
+    "Inglés": ["Se presenta y describe su entorno en inglés.", "Sostiene diálogos cortos sobre rutinas.", "Comprende textos breves en presente simple.", "Narra hechos pasados con verbos regulares."],
+    "Ciencias naturales": ["Diferencia mezclas y sustancias puras.", "Explica la estructura y funciones de la célula.", "Describe las relaciones dentro de un ecosistema.", "Compara fuentes de energía renovables y no renovables."],
+    "Ciencias sociales": ["Ubica las regiones naturales de Colombia.", "Ordena hechos históricos en una línea de tiempo.", "Explica las causas de la Independencia.", "Reconoce mecanismos de participación ciudadana."],
+    "Educación física": ["Mejora su resistencia aeróbica.", "Ejecuta los fundamentos del voleibol.", "Coordina movimientos en secuencias rítmicas.", "Valora la actividad física como hábito saludable."],
+}
+DIMENSIONES = ["Dimensión cognitiva", "Dimensión comunicativa", "Dimensión corporal", "Dimensión socioafectiva"]
+VALORACIONES = {
+    "Dimensión cognitiva": ["Reconoce los números hasta el 20 y clasifica objetos por forma y color. Disfruta los juegos de lógica.", "Cuenta con seguridad hasta el 10. Estamos reforzando la relación entre número y cantidad."],
+    "Dimensión comunicativa": ["Narra con sus palabras los cuentos leídos en clase y escribe su nombre sin ayuda.", "Se expresa con claridad y participa en las conversaciones. Avanza en el reconocimiento de las vocales."],
+    "Dimensión corporal": ["Tiene buen equilibrio y coordinación. Recorta y colorea respetando los límites.", "Disfruta el juego al aire libre. Seguimos fortaleciendo el agarre del lápiz."],
+    "Dimensión socioafectiva": ["Comparte con sus compañeros y sigue las normas del salón. Expresa lo que siente.", "Es cariñoso y colaborador. Estamos trabajando en esperar el turno."],
+}
+JORNADA = [("1ª hora", "07:00", "07:55", False), ("2ª hora", "07:55", "08:50", False), ("3ª hora", "08:50", "09:45", False),
+           ("Descanso", "09:45", "10:15", True), ("4ª hora", "10:15", "11:10", False), ("5ª hora", "11:10", "12:05", False),
+           ("6ª hora", "12:05", "13:00", False)]
+MESES = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"]
+
+
+def escudo_de_ejemplo():
+    """Un escudo genérico dibujado aquí mismo, para mostrar la personalización."""
+    from io import BytesIO
+
+    from PIL import Image, ImageDraw
+
+    lado = 400
+    img = Image.new("RGBA", (lado, lado), (0, 0, 0, 0))
+    d = ImageDraw.Draw(img)
+    contorno = [(60, 40), (340, 40), (340, 210), (200, 370), (60, 210)]
+    d.polygon(contorno, fill=(20, 82, 63, 255))
+    d.polygon([(84, 64), (316, 64), (316, 200), (200, 336), (84, 200)], outline=(242, 194, 48, 255), width=6)
+    # Un árbol sencillo: el arrayán que da nombre al colegio.
+    d.rectangle([190, 200, 210, 280], fill=(242, 194, 48, 255))
+    for cx, cy, r in [(200, 150, 52), (160, 180, 36), (240, 180, 36)]:
+        d.ellipse([cx - r, cy - r, cx + r, cy + r], fill=(255, 255, 255, 255))
+    salida = BytesIO()
+    img.save(salida, format="PNG", optimize=True)
+    return salida.getvalue()
+
 
 NOMBRES_F = ["María José", "Valentina", "Sara Sofía", "Isabella", "Luciana", "Mariana", "Gabriela", "Salomé",
              "Juliana", "Antonella", "Daniela", "Laura Camila", "Paula Andrea", "Manuela", "Catalina"]
@@ -79,13 +124,20 @@ class Command(BaseCommand):
 
     def add_arguments(self, parser):
         parser.add_argument("--reiniciar", action="store_true", help="Borra el colegio de ejemplo y lo crea de nuevo.")
+        parser.add_argument("--actualizar", action="store_true",
+                            help="Lo crea si no existe y lo recrea solo si el ejemplo cambió de versión.")
 
     @transaction.atomic
     def handle(self, *args, **opciones):
-        existente = Colegio.objects.filter(nombre=NOMBRE).first()
+        existente = Colegio.objects.filter(nombre=NOMBRE).defer("escudo").first()
         if existente:
-            if not opciones["reiniciar"]:
+            if opciones["actualizar"] and existente.version_demo >= VERSION:
+                self.stdout.write("El colegio de ejemplo ya está al día.")
+                return
+            if not (opciones["reiniciar"] or opciones["actualizar"]):
                 raise CommandError("El colegio de ejemplo ya existe. Use --reiniciar para recrearlo.")
+            # Orden obligado por las relaciones protegidas: estudiantes, clases, grupos y al final el colegio.
+            Estudiante.objects.filter(colegio=existente).delete()
             Clase.objects.filter(grupo__anio__colegio=existente).delete()
             Grupo.objects.filter(anio__colegio=existente).delete()
             existente.delete()
@@ -97,7 +149,8 @@ class Command(BaseCommand):
             nombre=NOMBRE, lema="Aprender para servir", nit="900.123.456-7", codigo_dane="368547000123",
             resolucion="Resolución de aprobación 04512 de 2015", ciudad="Piedecuesta, Santander",
             direccion="Carrera 6 # 12-40", telefono="607 655 0100", correo="secretaria@losarrayanes.example",
-            nombre_rector="Beatriz Helena Mantilla Rueda",
+            nombre_rector="Beatriz Helena Mantilla Rueda", version_demo=VERSION,
+            escudo=escudo_de_ejemplo(), escudo_tipo="image/png", escudo_version=1,
         )
 
         def usuario(doc, nombres, apellidos, rol, **extra):
@@ -106,7 +159,9 @@ class Command(BaseCommand):
             u.save()
             return u
 
-        usuario("1001", "Beatriz Helena", "Mantilla Rueda", "directivo", email="rectoria@losarrayanes.example")
+        usuario("1001", "Beatriz Helena", "Mantilla Rueda", "directivo", cargo="rector", email="rectoria@losarrayanes.example")
+        usuario("1002", "Hernán Darío", "Pabón Suárez", "directivo", cargo="coordinador")
+        secretaria = usuario("1003", "Yolanda", "Afanador Rojas", "directivo", cargo="secretaria")
         docentes = [
             usuario("2001", "Jorge Enrique", "Serrano Prada", "docente", telefono="300 555 0101"),
             usuario("2002", "Diana Marcela", "Ardila Gómez", "docente", telefono="300 555 0102"),
@@ -132,15 +187,36 @@ class Command(BaseCommand):
         asignaturas = [Asignatura.objects.create(colegio=col, nombre=n, area=a) for n, a, _ in ASIGNATURAS]
         horas = {n: h for n, _, h in ASIGNATURAS}
         grados = [
-            Grado.objects.create(colegio=col, nombre="Sexto", abreviatura="6°", orden=6),
-            Grado.objects.create(colegio=col, nombre="Séptimo", abreviatura="7°", orden=7),
-            Grado.objects.create(colegio=col, nombre="Octavo", abreviatura="8°", orden=8),
+            Grado.objects.create(colegio=col, nombre="Sexto", abreviatura="6°", orden=6, pension=420000),
+            Grado.objects.create(colegio=col, nombre="Séptimo", abreviatura="7°", orden=7, pension=420000),
+            Grado.objects.create(colegio=col, nombre="Octavo", abreviatura="8°", orden=8, pension=440000),
         ]
+        for g in grados:
+            for asig in asignaturas:
+                PlanEstudio.objects.create(grado=g, asignatura=asig, horas_semanales=horas[asig.nombre])
+                Logro.objects.bulk_create([
+                    Logro(grado=g, asignatura=asig, periodo_numero=n + 1, texto=texto)
+                    for n, texto in enumerate(LOGROS[asig.nombre])
+                ])
+        Bloque.objects.bulk_create([
+            Bloque(colegio=col, nombre=n, inicio=i, fin=f, descanso=d) for n, i, f, d in JORNADA
+        ])
         grupos = [Grupo.objects.create(anio=anio, grado=g, nombre="A", director=docentes[i]) for i, g in enumerate(grados)]
         clases = []
         for grupo in grupos:
             for j, asig in enumerate(asignaturas):
                 clases.append(Clase.objects.create(grupo=grupo, asignatura=asig, docente=docentes[j], horas_semanales=horas[asig.nombre]))
+
+        # Preescolar: un grupo de Transición con valoración descriptiva por dimensiones.
+        transicion = Grado.objects.create(colegio=col, nombre="Transición", abreviatura="TR", orden=0, descriptivo=True, pension=380000)
+        maestra = usuario("2007", "Carolina", "Rueda Vargas", "docente", telefono="300 555 0107")
+        grupo_tr = Grupo.objects.create(anio=anio, grado=transicion, nombre="A", director=maestra)
+        clases_tr = []
+        for nombre_dim in DIMENSIONES:
+            dim = Asignatura.objects.create(colegio=col, nombre=nombre_dim, area="Preescolar")
+            PlanEstudio.objects.create(grado=transicion, asignatura=dim, horas_semanales=5)
+            clases_tr.append(Clase.objects.create(grupo=grupo_tr, asignatura=dim, docente=maestra, horas_semanales=5))
+        horarios.generar(anio, semilla=7)
 
         # Estudiantes y acudientes. Algunos acudientes tienen dos hijos en grupos distintos.
         matriculas, doc_est, doc_ac = [], 1100000000, 3000
@@ -176,6 +252,28 @@ class Command(BaseCommand):
 
         por_grupo = {g.id: [m for m in matriculas if m.grupo_id == g.id] for g in grupos}
 
+        # Niños de Transición, con su acudiente y sus valoraciones de los periodos ya cerrados y del vigente.
+        matriculas_tr = []
+        for k in range(10):
+            ap1, ap2 = rnd.sample(APELLIDOS, 2)
+            nina = rnd.random() < 0.5
+            doc_est += rnd.randint(11, 97)
+            est = Estudiante.objects.create(
+                colegio=col, nombres=rnd.choice(NOMBRES_F if nina else NOMBRES_M), apellidos=f"{ap1} {ap2}",
+                tipo_documento="RC", documento=str(doc_est), fecha_nacimiento=date(anio_n - 5, rnd.randint(1, 12), rnd.randint(1, 28)),
+            )
+            m = Matricula.objects.create(estudiante=est, grupo=grupo_tr, fecha=cortes[0])
+            m.constancia = rnd.choice([0.98, 0.95, 0.9])
+            matriculas_tr.append(m)
+            doc_ac += 1
+            ac = usuario(str(doc_ac), rnd.choice(ADULTOS_F), f"{ap2} {rnd.choice(APELLIDOS)}", "acudiente",
+                         telefono=f"31{rnd.randint(0, 9)} 555 {rnd.randint(1000, 9999)}")
+            Acudiencia.objects.create(estudiante=est, acudiente=ac, parentesco="madre")
+        ValoracionDescriptiva.objects.bulk_create([
+            ValoracionDescriptiva(matricula=m, clase=c, periodo=p, texto=rnd.choice(VALORACIONES[c.asignatura.nombre]))
+            for m in matriculas_tr for c in clases_tr for p in periodos
+        ])
+
         # Notas
         notas = []
         for clase in clases:
@@ -202,6 +300,18 @@ class Command(BaseCommand):
                         notas.append(Nota(actividad=act, matricula=m, valor=Decimal(str(valor))))
         Nota.objects.bulk_create(notas)
 
+        # Recuperaciones del tercer periodo: la mitad de quienes perdieron Matemáticas la presentaron.
+        from core import calculos
+
+        for clase in [c for c in clases if c.asignatura.nombre == "Matemáticas"]:
+            _, _, definitivas = calculos.notas_de_clase(clase, periodos[2])
+            perdieron = [m for m in por_grupo[clase.grupo_id] if definitivas.get(m.id) is not None and definitivas[m.id] < col.desde_basico]
+            Recuperacion.objects.bulk_create([
+                Recuperacion(matricula=m, clase=clase, periodo=periodos[2], valor=Decimal(rnd.choice(["3.2", "3.6", "4.0", "2.5"])),
+                             fecha=periodos[2].fecha_fin)
+                for m in perdieron[::2]
+            ])
+
         # Asistencia de las últimas tres semanas
         asistencias = []
         for clase in clases:
@@ -221,7 +331,8 @@ class Command(BaseCommand):
             vencida = Tarea.objects.create(clase=clase, titulo=t1, descripcion=d1,
                                            fecha_asignacion=hoy - timedelta(days=12), fecha_entrega=hoy - timedelta(days=rnd.randint(3, 6)))
             Tarea.objects.create(clase=clase, titulo=t2, descripcion=d2, fecha_asignacion=hoy - timedelta(days=2),
-                                 fecha_entrega=hoy + timedelta(days=rnd.randint(0, 6)))
+                                 fecha_entrega=hoy + timedelta(days=rnd.randint(1, 6)),
+                                 entrega_en_linea=clase.asignatura.nombre in ("Lengua castellana", "Inglés", "Ciencias naturales"))
             for m in por_grupo[clase.grupo_id]:
                 r = rnd.random()
                 estado = "entregada" if r < m.constancia - 0.05 else rnd.choice(["tarde", "no_entregada", "no_entregada"])
@@ -236,6 +347,26 @@ class Command(BaseCommand):
                                            fecha=hoy - timedelta(days=rnd.randint(2, 40)))
             for periodo in periodos[:3]:
                 ComentarioBoletin.objects.create(matricula=m, periodo=periodo, texto=rnd.choice(COMENTARIOS))
+
+        # Pensiones: tres meses cobrados; la mayoría al día y algunos en mora.
+        cobros, pagos = [], []
+        for desfase in (2, 1, 0):
+            mes = (hoy.month - 1 - desfase) % 12
+            vence = (hoy.replace(day=10) - timedelta(days=30 * desfase)).replace(day=10)
+            for m in matriculas + matriculas_tr:
+                cobros.append(Cobro(estudiante=m.estudiante, anio=anio, concepto=f"Pensión de {MESES[mes]}",
+                                    valor=m.grupo.grado.pension, vence=vence))
+        Cobro.objects.bulk_create(cobros)
+        cumplido = {}
+        for c in Cobro.objects.filter(anio=anio).order_by("vence"):
+            cumplido.setdefault(c.estudiante_id, rnd.random())
+            r = cumplido[c.estudiante_id]
+            al_dia = r < 0.72 or (r < 0.9 and c.vence < hoy - timedelta(days=20))
+            if c.vence <= hoy + timedelta(days=5) and al_dia:
+                pagos.append(Pago(cobro=c, valor=c.valor, fecha=min(hoy, c.vence - timedelta(days=rnd.randint(0, 6))),
+                                  medio=rnd.choice(["transferencia", "transferencia", "efectivo", "consignacion"]),
+                                  referencia=str(rnd.randint(100000, 999999)), registrado_por=secretaria))
+        Pago.objects.bulk_create(pagos)
 
         rectora = Usuario.objects.get(username="1001")
         Comunicado.objects.create(colegio=col, autor=rectora, titulo="Entrega de boletines del cuarto periodo",
@@ -253,8 +384,11 @@ class Command(BaseCommand):
         self.stdout.write(self.style.SUCCESS(f"\nColegio de ejemplo creado: {NOMBRE}"))
         self.stdout.write(f"  {len(matriculas)} estudiantes, {len(clases)} clases, {len(notas)} notas, {len(asistencias)} registros de asistencia\n")
         self.stdout.write(f"Contraseña de todas las cuentas de ejemplo: {CLAVE}")
-        self.stdout.write("  Rectoría:   usuario 1001")
-        self.stdout.write("  Docente:    usuario 2001 (Matemáticas, director de 6°A)")
+        self.stdout.write("  Rectoría:      usuario 1001")
+        self.stdout.write("  Coordinación:  usuario 1002")
+        self.stdout.write("  Secretaría:    usuario 1003")
+        self.stdout.write("  Docente:       usuario 2001 (Matemáticas, director de 6°A)")
+        self.stdout.write("  Preescolar:    usuario 2007 (Transición, valoración descriptiva)")
         self.stdout.write(f"  Acudiente:  usuario {ejemplo.acudiente.username} ({ejemplo.acudiente.nombre_completo}, de {ejemplo.estudiante.nombre_natural})")
         if doble:
             self.stdout.write(f"  Acudiente con dos hijos: usuario {doble.username}")

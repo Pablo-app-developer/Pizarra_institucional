@@ -6,12 +6,14 @@
   <link rel="stylesheet" href="{% static 'css/app.css' %}">
   <link rel="icon" href="{% static 'img/favicon.svg' %}" type="image/svg+xml">
 </head>
-<body>
+<body{% if colegio_ingreso.color %} style="--tablero: {{ colegio_ingreso.color }}; --tablero-hondo: color-mix(in srgb, {{ colegio_ingreso.color }} 76%, black)"{% endif %}>
 <div class="ingreso">
   <section class="ingreso__tablero">
-    <div class="marca__producto">Pizarra</div>
+    {% if colegio_ingreso.escudo_tipo %}<div class="ingreso__colegio"><img src="{% url 'escudo' colegio_ingreso.pk %}?v={{ colegio_ingreso.escudo_version }}" alt=""><span>{{ colegio_ingreso.nombre }}</span></div>
+    {% elif colegio_ingreso %}<div class="marca__producto">{{ colegio_ingreso.nombre }}</div>
+    {% else %}<div class="marca__producto">Pizarra</div>{% endif %}
     <div>
-      <p class="ingreso__lema">El colegio y la casa, en la misma página.</p>
+      <p class="ingreso__lema">{% if colegio_ingreso.lema %}{{ colegio_ingreso.lema }}{% else %}El colegio y la casa, en la misma página.{% endif %}</p>
       <span class="ingreso__trazo"></span>
       <ul class="ingreso__puntos">
         <li>Notas al día, con el desempeño de cada asignatura.</li>
@@ -26,6 +28,7 @@
       {% csrf_token %}
       <h1>Ingresar</h1>
       <p class="secundario" style="margin-bottom:22px">Use el número de documento con el que el colegio lo registró.</p>
+      {% if request.GET.clave %}<div class="mensaje" role="status">Su contraseña quedó cambiada. Ya puede ingresar.</div>{% endif %}
       {% if form.errors %}<div class="mensaje mensaje--error" role="alert">El documento o la contraseña no coinciden. Revise e intente de nuevo; si la olvidó, pídale al colegio una contraseña nueva.</div>{% endif %}
       <div class="campo"><label for="id_username">Documento</label>
         <input type="text" name="username" id="id_username" autocomplete="username" inputmode="numeric" autofocus required value="{{ form.username.value|default:'' }}"></div>
@@ -33,6 +36,7 @@
         <input type="password" name="password" id="id_password" autocomplete="current-password" required></div>
       <input type="hidden" name="next" value="{{ next }}">
       <button class="boton" type="submit">Ingresar</button>
+      <p class="pequeno" style="margin-top:16px"><a href="{% url 'password_reset' %}">Olvidé mi contraseña</a></p>
     </form>
   </section>
 </div>

@@ -1,0 +1,8 @@
+{% extends "familia/_base.html" %}
+{% block familia %}
+<dl class="cifras"><div class="cifra"><dt>Saldo por pagar</dt><dd>$ {{ total.saldo|floatformat:"0g" }}</dd></div>
+<div class="cifra"><dt>Vencido</dt><dd>$ {{ total.vencido|floatformat:"0g" }}</dd></div>
+<div class="cifra"><dt>Pagado este año</dt><dd>$ {{ total.pagado|floatformat:"0g" }}</dd></div></dl>
+<section class="panel"><div class="panel__cabeza"><h2>Estado de cuenta</h2></div>{% include "pensiones/_cobros.html" with administra=False vacio="El colegio no ha registrado cobros este año." %}</section>
+<p class="campo__ayuda" style="margin-top:12px">Los pagos los registra la secretaría del colegio cuando los recibe. Si ya pagó y no aparece, comuníquese con secretaría{% if colegio.telefono %} ({{ colegio.telefono }}){% endif %}.</p>
+{% endblock %}

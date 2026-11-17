@@ -1,0 +1,17 @@
+{% extends "base/base.html" %}
+{% block titulo %}Horarios{% endblock %}
+{% block contenido %}
+<div class="encabezado"><div><h1>Horarios</h1><p class="encabezado__sub">{% if anio %}Año lectivo {{ anio.nombre }}. La jornada tiene {{ franjas }} horas de clase a la semana.{% endif %}</p></div>
+<div class="encabezado__acciones"><a class="boton boton--secundario" href="{% url 'gestion_lista' 'bloques' %}">Jornada escolar</a>
+{% if bloques and grupos %}<form method="post" action="{% url 'horarios_generar' %}" data-confirmar="Se reemplazará el horario de todos los grupos por uno nuevo generado automáticamente. ¿Continuar?">{% csrf_token %}<button class="boton" type="submit">Generar horario automáticamente</button></form>{% endif %}</div></div>
+{% if not bloques %}<div class="panel vacio"><p><strong>Primero defina la jornada escolar.</strong></p><p>Registre cada hora de clase y cada descanso con su hora de inicio y fin.</p>
+<p><a class="boton" href="{% url 'gestion_nuevo' 'bloques' %}">Agregar el primer bloque</a></p></div>
+{% elif not grupos %}<div class="panel vacio"><p>No hay grupos en el año activo.</p></div>
+{% else %}
+<p class="aviso aviso--info">La generación automática reparte las horas de cada asignatura en la semana y garantiza que ningún docente quede en dos grupos a la misma hora. Después puede ajustar cualquier grupo a mano.</p>
+<div class="tabla-envoltura"><table><thead><tr><th>Grupo</th><th class="num">Horas del plan</th><th class="num">Programadas</th><th>Estado</th><th></th></tr></thead>
+<tbody>{% for g in grupos %}<tr class="fila-enlace"><th scope="row"><a href="{% url 'horario_grupo' g.grupo.pk %}">{{ g.grupo.nombre_largo }}</a></th><td class="num">{{ g.requeridas }}</td><td class="num">{{ g.programadas }}</td>
+<td>{% if not g.programadas %}<span class="estado">Sin horario</span>{% elif g.programadas == g.requeridas %}<span class="estado estado--bien">Completo</span>{% else %}<span class="estado estado--aviso">Incompleto</span>{% endif %}</td>
+<td class="num"><a href="{% url 'horario_grupo' g.grupo.pk %}" style="font-weight:400;text-decoration:underline">Ver y editar</a></td></tr>{% endfor %}</tbody></table></div>
+{% endif %}
+{% endblock %}

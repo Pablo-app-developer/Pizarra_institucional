@@ -1,0 +1,12 @@
+{% extends "base/base.html" %}
+{% block titulo %}Malla curricular de {{ grado.nombre }}{% endblock %}
+{% block contenido %}
+<div class="encabezado"><div><p class="miga no-imprimir">{% if user.es_directivo %}<a href="{% url 'plan' %}?grado={{ grado.pk }}">Plan de estudios</a> /{% endif %}</p>
+<h1>Malla curricular, {{ grado.nombre }}</h1><p class="encabezado__sub">{{ colegio.nombre }}. {{ total_horas }} horas semanales.</p></div>
+<div class="encabezado__acciones"><button class="boton" type="button" onclick="window.print()">Imprimir o guardar en PDF</button></div></div>
+<div class="tabla-envoltura">{% if filas %}<table class="malla">
+  <thead><tr><th>Asignatura</th><th class="num">Horas</th>{% for n in numeros %}<th>Periodo {{ n }}</th>{% endfor %}</tr></thead>
+  <tbody>{% for f in filas %}<tr><th scope="row"><strong>{{ f.item.asignatura }}</strong><div class="lista__meta">{{ f.item.asignatura.area }}</div></th><td class="num">{{ f.item.horas_semanales }}</td>
+  {% for lista in f.periodos %}<td>{% if lista %}<ul>{% for texto in lista %}<li>{{ texto }}</li>{% endfor %}</ul>{% else %}<span class="secundario">Sin definir</span>{% endif %}</td>{% endfor %}</tr>{% endfor %}</tbody>
+</table>{% else %}<div class="vacio"><p>Este grado no tiene plan de estudios todavía.</p></div>{% endif %}</div>
+{% endblock %}

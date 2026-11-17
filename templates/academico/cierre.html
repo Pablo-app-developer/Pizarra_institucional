@@ -1,0 +1,26 @@
+{% extends "base/base.html" %}{% load pizarra %}
+{% block titulo %}Cierre de año{% endblock %}
+{% block contenido %}
+<div class="encabezado"><div><p class="miga"><a href="{% url 'configuracion' %}">Configuración</a> /</p><h1>Cierre de año{% if anio %} {{ anio.nombre }}{% endif %}</h1>
+<p class="encabezado__sub">Defina quién aprueba y cree el año siguiente con los estudiantes ya ubicados en su nuevo grado.</p></div></div>
+{% if not anio %}<div class="panel vacio"><p>No hay un año lectivo activo.</p></div>{% else %}
+{% if periodos_abiertos %}<p class="aviso">Aún hay periodos abiertos ({% for p in periodos_abiertos %}{{ p.nombre|lower }}{% if not forloop.last %}, {% endif %}{% endfor %}). Las notas finales pueden cambiar: conviene cerrar todos los periodos antes de promover.</p>{% endif %}
+<p class="aviso aviso--info">La propuesta marca como reprobado a quien pierde {{ colegio.perdidas_para_reprobar }} o más asignaturas en el acumulado del año. Es solo una sugerencia: la decisión es de la comisión de evaluación y aquí se puede cambiar estudiante por estudiante.</p>
+<form method="post">{% csrf_token %}
+{% for grupo, filas in grupos %}<section class="panel"><div class="panel__cabeza"><h2>{{ grupo.nombre_largo }}</h2></div>
+<div class="tabla-envoltura"><table class="personas"><thead><tr><th>Estudiante</th><th>Promedio del año</th><th class="num">Asignaturas perdidas</th><th>Resultado</th></tr></thead>
+<tbody>{% for f in filas %}<tr><th scope="row">{{ f.matricula.estudiante }}</th><td>{% desempeno f.final %}</td>
+<td class="num">{% if f.perdidas %}<span class="estado estado--mal">{{ f.perdidas }}</span>{% else %}0{% endif %}</td>
+<td><select name="r_{{ f.matricula.pk }}" aria-label="Resultado de {{ f.matricula.estudiante }}" style="max-width:190px">{% for valor, etiqueta in opciones %}<option value="{{ valor }}"{% if f.valor == valor %} selected{% endif %}>{{ etiqueta }}</option>{% endfor %}</select>
+{% if not f.guardado %} <span class="estado">Propuesta</span>{% endif %}</td></tr>{% endfor %}</tbody></table></div></section>{% endfor %}
+<div class="barra-guardar"><span class="pequeno">{% if pendientes %}{{ pendientes }} estudiante{{ pendientes|pluralize }} con resultado sin guardar.{% else %}Todos los resultados están guardados.{% endif %}</span>
+<button class="boton" type="submit" name="accion" value="guardar">Guardar resultados</button></div>
+</form>
+<section class="panel" style="margin-top:20px"><div class="panel__cabeza"><h2>Crear el año {{ siguiente_nombre }}</h2></div><div class="panel__cuerpo">
+{% if ya_existe %}<p>El año {{ siguiente_nombre }} ya fue creado. Revíselo y actívelo en <a href="{% url 'gestion_lista' 'anios' %}">Años lectivos</a> cuando vaya a empezar.</p>
+{% elif pendientes %}<p class="secundario">Guarde primero el resultado de todos los estudiantes.</p>
+{% else %}<p style="max-width:70ch">Se crearán los periodos (mismas fechas, un año después), los mismos grupos con sus clases y docentes, y la matrícula de cada estudiante: los promovidos pasan al grado siguiente y los reprobados repiten. El año nuevo queda inactivo hasta que usted lo active; el actual no se modifica.</p>
+<form method="post" data-confirmar="¿Crear el año {{ siguiente_nombre }} con los resultados guardados?" style="margin-top:14px">{% csrf_token %}<button class="boton" type="submit" name="accion" value="crear">Crear año {{ siguiente_nombre }}</button></form>{% endif %}
+</div></section>
+{% endif %}
+{% endblock %}

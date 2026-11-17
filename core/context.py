@@ -1,41 +1,48 @@
-"""Menú lateral según el rol."""
+"""Menú lateral según el rol y, para directivos, según el cargo."""
 from django.urls import reverse
 
+from django.conf import settings
+
+from .models import Aviso, Colegio
 from .permisos import estudiantes_de
 
-MENU = {
-    "directivo": [
-        ("Inicio", "panel", "inicio"),
-        ("Estudiantes", "gestion_lista:estudiantes", "personas"),
-        ("Docentes", "gestion_lista:docentes", "docente"),
-        ("Acudientes", "gestion_lista:acudientes", "familia"),
-        ("Grupos y clases", "grupos", "grupos"),
-        ("Consolidado de notas", "consolidado", "notas"),
-        ("Boletines", "boletines", "boletin"),
-        ("Comunicados", "comunicados", "comunicado"),
-        ("Configuración", "configuracion", "ajustes"),
-    ],
-    "docente": [
-        ("Mis clases", "mis_clases", "inicio"),
-        ("Comunicados", "comunicados", "comunicado"),
-    ],
-}
+# (etiqueta, nombre de URL[:argumento], icono, capacidad requerida o None)
+MENU_DIRECTIVO = [
+    ("Inicio", "panel", "inicio", None),
+    ("Estudiantes", "gestion_lista:estudiantes", "personas", "estudiantes"),
+    ("Acudientes", "gestion_lista:acudientes", "familia", "estudiantes"),
+    ("Docentes", "gestion_lista:docentes", "docente", "academico"),
+    ("Grupos y clases", "grupos", "grupos", "academico"),
+    ("Plan de estudios", "plan", "plan", "academico"),
+    ("Horarios", "horarios", "horario", "academico"),
+    ("Consolidado de notas", "consolidado", "notas", "academico"),
+    ("Boletines", "boletines", "boletin", "boletines"),
+    ("Pensiones", "cartera", "pension", "pensiones"),
+    ("Comunicados", "comunicados", "comunicado", "comunicados"),
+    ("Configuración", "configuracion", "ajustes", None),
+]
+MENU_DOCENTE = [
+    ("Mis clases", "mis_clases", "inicio", None),
+    ("Mi horario", "mi_horario", "horario", None),
+    ("Comunicados", "comunicados", "comunicado", None),
+]
 
 
 def navegacion(request):
     usuario = getattr(request, "user", None)
-    if not usuario or not usuario.is_authenticated or not usuario.colegio_id:
+    if not usuario or not usuario.is_authenticated:
+        # Pantallas de ingreso: si la instalación atiende un solo colegio, se muestra su identidad.
+        unicos = list(Colegio.objects.defer("escudo")[:2])
+        return {"colegio_ingreso": unicos[0] if len(unicos) == 1 else None, "correo_activo": settings.CORREO_ACTIVO}
+    if not usuario.colegio_id:
         return {}
-    actual = request.path
     items = []
-    if usuario.rol in MENU:
-        for etiqueta, nombre, icono in MENU[usuario.rol]:
-            if ":" in nombre:
-                ruta, arg = nombre.split(":")
-                url = reverse(ruta, args=[arg])
-            else:
-                url = reverse(nombre)
-            items.append({"etiqueta": etiqueta, "url": url, "icono": icono})
+    if usuario.es_directivo or usuario.es_docente:
+        for etiqueta, nombre, icono, cap in MENU_DIRECTIVO if usuario.es_directivo else MENU_DOCENTE:
+            if cap and not usuario.puede(cap):
+                continue
+            ruta, _, arg = nombre.partition(":")
+            items.append({"etiqueta": etiqueta, "url": reverse(ruta, args=[arg] if arg else []), "icono": icono})
     else:
         hijos = list(estudiantes_de(usuario))
         for h in hijos:
@@ -44,12 +51,17 @@ def navegacion(request):
                 "url": reverse("familia_resumen", args=[h.pk]), "icono": "inicio",
             })
         items.append({"etiqueta": "Comunicados", "url": reverse("comunicados"), "icono": "comunicado"})
+    sin_leer = Aviso.objects.filter(usuario=usuario, leido=False).count()
+    items.append({"etiqueta": "Avisos", "url": reverse("avisos"), "icono": "aviso", "contador": sin_leer})
+
     # El ítem activo es el de URL más larga que sea prefijo de la ruta actual.
-    activo = None
+    actual, activo = request.path, None
+    inicio_directivo = reverse("panel")  # "/colegio/" es prefijo de todo: solo se marca si es exacto
     for it in items:
-        if actual == it["url"] or (actual.startswith(it["url"]) and it["url"] != "/"):
+        if actual == it["url"] or (actual.startswith(it["url"]) and it["url"] not in ("/", inicio_directivo)):
             if activo is None or len(it["url"]) > len(activo["url"]):
                 activo = it
     for it in items:
         it["activo"] = it is activo
-    return {"menu": items, "colegio": usuario.colegio}
+    capacidades = usuario.CAPACIDADES.get(usuario.cargo or "rector", set()) if usuario.es_directivo else set()
+    return {"menu": items, "colegio": usuario.colegio, "capacidades": capacidades}

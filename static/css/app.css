@@ -286,3 +286,31 @@ details.detalle .tabla-envoltura { border: 0; border-top: 1px solid var(--linea-
   .lateral, .barra-movil, .encabezado__acciones, .no-imprimir { display: none !important; }
   .principal { margin: 0; padding: 0; } body { background: #fff; }
 }
+
+/* ---------- Identidad del colegio ---------- */
+.marca__escudo { display: grid; place-items: center; background: #fff; border-radius: 10px; padding: 8px; width: 84px; height: 84px; margin-bottom: 10px; }
+.marca__escudo img { max-width: 100%; max-height: 100%; object-fit: contain; }
+.marca__nombre { font-weight: 700; font-size: var(--t-m); line-height: 1.25; }
+.ingreso__colegio { display: flex; align-items: center; gap: 14px; font-weight: 700; font-size: var(--t-l); }
+.ingreso__colegio img { width: 72px; height: 72px; object-fit: contain; background: #fff; border-radius: 10px; padding: 6px; }
+.contador { margin-left: auto; background: var(--tiza); color: #2b2200; font-size: var(--t-xs); font-weight: 700; border-radius: 10px; padding: 0 7px; min-width: 22px; text-align: center; }
+input[type="color"] { width: 72px; height: 42px; padding: 3px; border: 1px solid #b4beb8; border-radius: var(--radio); background: var(--papel); }
+
+/* ---------- Horarios ---------- */
+.horario th, .horario td { text-align: center; border-right: 1px solid var(--linea-suave); padding: 8px; }
+.horario th:last-child, .horario td:last-child { border-right: 0; }
+.horario .hora { text-align: left; white-space: nowrap; background: #f7f9f7; min-width: 118px; }
+.horario .hora small { display: block; color: var(--tinta-2); font-weight: 400; }
+.horario td.descanso { background: repeating-linear-gradient(135deg, #f3f5f3 0 8px, #fafbfa 8px 16px); color: var(--tinta-2); font-size: var(--t-xs); }
+.horario td strong { display: block; line-height: 1.25; }
+.horario td small { color: var(--tinta-2); }
+.horario select { min-width: 132px; min-height: 38px; font-size: var(--t-s); padding: 4px 6px; }
+.horario td.libre { color: #9aa59f; }
+
+/* ---------- Malla y recibo (impresión) ---------- */
+.malla td { vertical-align: top; }
+.malla ul { margin: 0; padding-left: 18px; }
+.malla li + li { margin-top: 4px; }
+.recibo { max-width: 640px; }
+.dinero { text-align: right; white-space: nowrap; }
+.logros { margin: 6px 0 0; padding-left: 18px; color: var(--tinta-2); font-size: var(--t-s); }

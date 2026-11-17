@@ -1,0 +1,12 @@
+{% extends "docente/_clase.html" %}
+{% block clase %}
+{% include "docente/_periodos.html" %}
+{% if periodo.cerrado %}<p class="aviso aviso--info">{{ periodo.nombre }} está cerrado. Las valoraciones ya no se pueden cambiar.</p>
+{% else %}<p class="aviso aviso--info">Este grado se valora de forma descriptiva: escriba cómo va cada niño o niña en esta dimensión. El texto sale tal cual en el informe para la familia.</p>{% endif %}
+{% if filas %}<form method="post">{% csrf_token %}<input type="hidden" name="periodo" value="{{ periodo.pk }}">
+<div class="tabla-envoltura"><table><thead><tr><th>Estudiante</th><th style="min-width:420px">Valoración de {{ periodo.nombre|lower }}</th></tr></thead>
+<tbody>{% for f in filas %}<tr><th scope="row" style="vertical-align:top">{{ f.matricula.estudiante }}</th>
+<td><textarea name="v_{{ f.matricula.pk }}" rows="3" aria-label="Valoración de {{ f.matricula.estudiante }}"{% if periodo.cerrado %} disabled{% endif %}>{{ f.texto }}</textarea></td></tr>{% endfor %}</tbody></table></div>
+{% if not periodo.cerrado %}<div class="barra-guardar"><span class="pequeno secundario">Lo que deje vacío no aparece en el informe.</span><button class="boton" type="submit">Guardar valoraciones</button></div>{% endif %}</form>
+{% else %}<div class="panel vacio"><p>Este grupo no tiene estudiantes matriculados.</p></div>{% endif %}
+{% endblock %}

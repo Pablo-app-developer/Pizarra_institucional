@@ -6,9 +6,17 @@ from django.shortcuts import render
 from django.utils import timezone
 
 from .. import calculos
-from ..models import Actividad, Asistencia, Entrega, Nota, Tarea
+from django.contrib import messages
+from django.shortcuts import get_object_or_404, redirect
+
+from ..forms import EntregaEnLineaForm
+from ..models import Actividad, Asistencia, Entrega, Logro, Nota, Recuperacion, Tarea, ValoracionDescriptiva
 from ..permisos import estudiante_para, estudiantes_de, familia
 from .comunes import comunicados_para, periodo_vigente
+
+
+def hermanos_de(usuario):
+    return list(estudiantes_de(usuario))
 
 
 def _base(request, pk):
@@ -36,7 +44,7 @@ def _tareas(matricula):
     for t in tareas:
         t.entrega = entregas.get(t.id)
         if t.entrega:
-            t.situacion = t.entrega.estado
+            t.situacion = t.entrega.estado  # incluye "enviada": el estudiante la mandó y falta revisarla
         elif t.fecha_entrega >= hoy:
             t.situacion = "pendiente"
         else:
@@ -87,10 +95,21 @@ def notas(request, pk):
     valores = {n.actividad_id: n.valor for n in Nota.objects.filter(matricula=matricula, actividad__periodo=periodo)}
     for a in Actividad.objects.filter(clase__grupo=matricula.grupo, periodo=periodo):
         actividades[a.clase_id].append({"actividad": a, "valor": valores.get(a.id)})
+    recuperadas = {r.clase_id: r.valor for r in Recuperacion.objects.filter(matricula=matricula, periodo=periodo)}
+    grado = matricula.grupo.grado
+    logros = {}
+    for logro in Logro.objects.filter(grado=grado, periodo_numero=periodo.numero):
+        logros.setdefault(logro.asignatura_id, []).append(logro.texto)
+    descriptivas = {
+        v.clase_id: v.texto for v in ValoracionDescriptiva.objects.filter(matricula=matricula, periodo=periodo)
+    } if grado.descriptivo else {}
     for f in filas:
         f["nota"] = f["periodos"][periodo.id]
         f["actividades"] = actividades.get(f["clase"].id, [])
-    ctx.update({"filas": filas, "promedio": promedios[periodo.id], "seccion": "notas"})
+        f["recuperacion"] = recuperadas.get(f["clase"].id)
+        f["logros"] = logros.get(f["clase"].asignatura_id, [])
+        f["valoracion"] = descriptivas.get(f["clase"].id, "")
+    ctx.update({"filas": filas, "promedio": promedios[periodo.id], "seccion": "notas", "descriptivo": grado.descriptivo})
     return render(request, "familia/notas.html", ctx)
 
 
@@ -104,6 +123,7 @@ def tareas(request, pk):
     ctx["anteriores"] = sorted(
         (t for t in todas if t.situacion != "pendiente"), key=lambda t: t.fecha_entrega, reverse=True
     )[:40]
+    ctx["detalle"] = True
     ctx["seccion"] = "tareas"
     return render(request, "familia/tareas.html", ctx)
 
@@ -139,3 +159,39 @@ def boletines(request, pk):
         return render(request, "familia/sin_matricula.html", ctx)
     ctx["seccion"] = "boletines"
     return render(request, "familia/boletines.html", ctx)
+
+
+@familia
+def tarea(request, pk, tarea_id):
+    """Detalle de una tarea. Si el docente la recibe por la plataforma, aquí se envía."""
+    est, matricula, ctx = _base(request, pk)
+    if not matricula:
+        return render(request, "familia/sin_matricula.html", ctx)
+    t = get_object_or_404(
+        Tarea.objects.select_related("clase__asignatura", "clase__docente"), pk=tarea_id, clase__grupo=matricula.grupo
+    )
+    entrega = Entrega.objects.filter(tarea=t, matricula=matricula).first()
+    # Se puede enviar o corregir el envío mientras el docente no la haya calificado.
+    puede_enviar = t.entrega_en_linea and (entrega is None or entrega.estado == "enviada")
+    form = EntregaEnLineaForm(request.POST or None, request.FILES or None) if puede_enviar else None
+    if form is not None and request.method == "POST" and form.is_valid():
+        datos = form.cleaned_data
+        if entrega is None:
+            entrega = Entrega(tarea=t, matricula=matricula)
+        entrega.estado = "enviada"
+        entrega.respuesta, entrega.enlace = datos["respuesta"], datos["enlace"]
+        entrega.enviada = timezone.now()
+        if datos["archivo"]:
+            if entrega.archivo:
+                entrega.archivo.delete(save=False)
+            entrega.archivo = datos["archivo"]
+        entrega.save()
+        messages.success(request, "Tarea enviada. El docente la revisará y aquí verá el resultado.")
+        return redirect("familia_tarea", est.pk, t.pk)
+    if form is not None and request.method != "POST" and entrega:
+        form = EntregaEnLineaForm(initial={"respuesta": entrega.respuesta, "enlace": entrega.enlace})
+    ctx.update({
+        "t": t, "entrega": entrega, "form": form, "seccion": "tareas",
+        "tarde": t.fecha_entrega < timezone.localdate(),
+    })
+    return render(request, "familia/tarea.html", ctx)

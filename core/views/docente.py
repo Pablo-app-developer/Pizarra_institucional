@@ -10,9 +10,13 @@ from django.utils import timezone
 from django.views.decorators.http import require_POST
 
 from .. import calculos
+from django.urls import reverse
+
+from ..avisos import avisar_estudiantes, avisar_grupo
 from ..forms import ActividadForm, ObservacionForm, TareaForm
 from ..models import (
-    Actividad, Asistencia, Clase, ComentarioBoletin, Entrega, Grupo, Matricula, Nota, Periodo, Tarea,
+    Actividad, Asistencia, Clase, ComentarioBoletin, Entrega, Grupo, Matricula, Nota, Periodo, PlanEstudio,
+    Recuperacion, Tarea, ValoracionDescriptiva,
 )
 from ..permisos import clase_para, docente_conoce, grupo_para, personal
 from .comunes import periodo_vigente
@@ -76,6 +80,8 @@ def _leer_nota(texto, colegio):
 @personal
 def planilla(request, pk):
     clase = clase_para(request.user, pk)
+    if clase.grupo.grado.descriptivo:
+        return redirect("clase_valoraciones", clase.pk)
     colegio = request.user.colegio
     periodos, periodo = _periodo(request, clase)
     if periodo is None:
@@ -129,6 +135,13 @@ def planilla(request, pk):
                 for n in cambiar:
                     n.save()
                 Nota.objects.filter(pk__in=borrar).delete()
+            por_id = {m.id: m for m in matriculas}
+            avisar_estudiantes([
+                (por_id[n.matricula_id].estudiante,
+                 f"{por_id[n.matricula_id].estudiante.nombres} obtuvo {str(n.valor).replace('.', ',')} en «{n.actividad.titulo}» de {clase.asignatura}.",
+                 reverse("familia_notas", args=[por_id[n.matricula_id].estudiante_id]))
+                for n in crear + cambiar if n.valor < colegio.desde_basico
+            ], f"Nota baja en {clase.asignatura}")
             total = len(crear) + len(cambiar) + len(borrar)
             messages.success(
                 request, "Planilla guardada." if total else "No había cambios por guardar."
@@ -154,7 +167,7 @@ def planilla(request, pk):
         "pesos_incompletos": suma_pesos not in (0, 100) and bool(actividades),
         "promedio_grupo": calculos.promedio_ponderado([(v, 1) for v in calificadas]),
         "perdiendo": sum(1 for v in calificadas if v < colegio.desde_basico),
-        "form_actividad": ActividadForm(),
+        "form_actividad": ActividadForm(), "plan": plan_de(clase),
     })
 
 
@@ -222,6 +235,12 @@ def tarea_form(request, pk, tarea_id=None):
         t = form.save(commit=False)
         t.clase = clase
         t.save()
+        if tarea is None:
+            avisar_grupo(
+                clase.grupo,
+                lambda e: f"Nueva tarea de {clase.asignatura} para {e.nombres}: «{t.titulo}», se entrega el {t.fecha_entrega:%d/%m/%Y}.",
+                lambda e: reverse("familia_tarea", args=[e.pk, t.pk]), f"Nueva tarea de {clase.asignatura}",
+            )
         messages.success(request, f"Tarea «{t.titulo}» guardada. Las familias ya la pueden ver.")
         return redirect("clase_tareas", clase.pk)
     return render(request, "docente/form.html", {
@@ -250,16 +269,24 @@ def tarea_entregas(request, pk, tarea_id):
     actuales = {e.matricula_id: e for e in tarea.entregas.all()}
     estados = {e.value for e in Entrega.Estado}
     if request.method == "POST":
+        nuevas_faltas = []
         with transaction.atomic():
             for m in matriculas:
                 estado = request.POST.get(f"e_{m.id}", "")
                 comentario = request.POST.get(f"c_{m.id}", "").strip()[:240]
+                previa = actuales.get(m.id)
                 if estado in estados:
                     Entrega.objects.update_or_create(
                         tarea=tarea, matricula=m, defaults={"estado": estado, "comentario": comentario}
                     )
-                elif m.id in actuales:
-                    actuales[m.id].delete()
+                    if estado == "no_entregada" and (previa is None or previa.estado != "no_entregada"):
+                        nuevas_faltas.append(m.estudiante)
+                elif previa is not None and not (previa.respuesta or previa.enlace or previa.archivo):
+                    previa.delete()  # nunca se borra lo que envió el estudiante
+        avisar_estudiantes([
+            (e, f"{e.nombres} no entregó la tarea «{tarea.titulo}» de {clase.asignatura}.",
+             reverse("familia_tarea", args=[e.pk, tarea.pk])) for e in nuevas_faltas
+        ], f"Tarea sin entregar en {clase.asignatura}")
         messages.success(request, "Entregas guardadas.")
         return redirect("clase_tareas", clase.pk)
     filas = [{"matricula": m, "entrega": actuales.get(m.id)} for m in matriculas]
@@ -288,6 +315,7 @@ def asistencia(request, pk):
     }
     estados = {e.value for e in Asistencia.Estado}
     if request.method == "POST":
+        faltaron = []
         with transaction.atomic():
             for m in matriculas:
                 estado = request.POST.get(f"a_{m.id}", "P")
@@ -296,6 +324,12 @@ def asistencia(request, pk):
                 Asistencia.objects.update_or_create(
                     clase=clase, matricula=m, fecha=fecha, defaults={"estado": estado}
                 )
+                if estado == "A" and (m.id not in actuales or actuales[m.id].estado != "A"):
+                    faltaron.append(m.estudiante)
+        avisar_estudiantes([
+            (e, f"{e.nombres} faltó a {clase.asignatura} el {fecha:%d/%m/%Y}. Si tiene excusa, entréguela al director de grupo.",
+             reverse("familia_asistencia", args=[e.pk])) for e in faltaron
+        ], f"Inasistencia a {clase.asignatura}")
         messages.success(request, f"Asistencia del {fecha:%d/%m/%Y} guardada.")
         return redirect(f"{request.path}?fecha={fecha.isoformat()}")
 
@@ -406,19 +440,113 @@ def direccion_grupo(request, pk):
         messages.success(request, "Observaciones del boletín guardadas.")
         return redirect(f"{request.path}?periodo={periodo.pk}")
 
-    puestos, _ = calculos.puestos_del_grupo(grupo, periodo)
     colegio = request.user.colegio
+    for m in matriculas:
+        m.grupo = grupo
+    datos, clases_por_grupo = calculos.consolidar(matriculas, [periodo], colegio)
+    puestos, _ = calculos.puestos({m.id: datos[m.id]["promedios"][periodo.id] for m in matriculas})
     filas = []
     for m in matriculas:
-        detalle, proms, _ = calculos.resumen_estudiante(m, periodos=[periodo])
+        notas = datos[m.id]["clases"]
         perdidas = [
-            f["clase"].asignatura.nombre for f in detalle
-            if f["periodos"][periodo.id] is not None and f["periodos"][periodo.id] < colegio.desde_basico
+            c.asignatura.nombre for c in clases_por_grupo[grupo.id]
+            if notas[c.id]["periodos"][periodo.id] is not None and notas[c.id]["periodos"][periodo.id] < colegio.desde_basico
         ]
         filas.append({
-            "matricula": m, "promedio": proms[periodo.id], "puesto": puestos.get(m.id),
+            "matricula": m, "promedio": datos[m.id]["promedios"][periodo.id], "puesto": puestos.get(m.id),
             "perdidas": perdidas, "comentario": comentarios[m.id].texto if m.id in comentarios else "",
         })
     return render(request, "docente/direccion_grupo.html", {
         "grupo": grupo, "periodos": periodos, "periodo": periodo, "filas": filas,
     })
+
+
+# ------------------------------------------------------------ Recuperaciones
+
+
+@personal
+def recuperaciones(request, pk):
+    """Quienes perdieron la asignatura en un periodo y su nota de recuperación."""
+    clase = clase_para(request.user, pk)
+    colegio = request.user.colegio
+    periodos, periodo = _periodo(request, clase)
+    if periodo is None:
+        return redirect("mis_clases")
+    matriculas = _matriculas(clase.grupo)
+    _, _, definitivas = calculos.notas_de_clase(clase, periodo)
+    actuales = {r.matricula_id: r for r in Recuperacion.objects.filter(clase=clase, periodo=periodo)}
+    candidatos = [
+        m for m in matriculas
+        if m.id in actuales or (definitivas.get(m.id) is not None and definitivas[m.id] < colegio.desde_basico)
+    ]
+    errores = {}
+    if request.method == "POST":
+        guardar, borrar = [], []
+        for m in candidatos:
+            texto = request.POST.get(f"r_{m.id}", "")
+            try:
+                valor = _leer_nota(texto, colegio)
+            except ValueError as e:
+                errores[m.id] = (texto, str(e))
+                continue
+            if valor is None:
+                if m.id in actuales:
+                    borrar.append(actuales[m.id].pk)
+            else:
+                guardar.append((m, valor))
+        if errores:
+            messages.error(request, "No se guardó: hay notas inválidas, marcadas en rojo.")
+        else:
+            with transaction.atomic():
+                for m, valor in guardar:
+                    Recuperacion.objects.update_or_create(matricula=m, clase=clase, periodo=periodo, defaults={"valor": valor})
+                Recuperacion.objects.filter(pk__in=borrar).delete()
+            messages.success(request, "Recuperaciones guardadas.")
+            return redirect(f"{request.path}?periodo={periodo.pk}")
+    filas = []
+    for m in candidatos:
+        original = definitivas.get(m.id)
+        rec = actuales[m.id].valor if m.id in actuales else None
+        filas.append({
+            "matricula": m, "original": original,
+            "valor": errores[m.id][0] if m.id in errores else (rec if rec is not None else ""),
+            "error": errores[m.id][1] if m.id in errores else "",
+            "queda": calculos.aplicar_recuperacion(original, rec, colegio.tope_recuperacion),
+        })
+    return render(request, "docente/recuperaciones.html", {
+        "clase": clase, "periodos": periodos, "periodo": periodo, "filas": filas, "seccion": "recuperaciones",
+    })
+
+
+# ------------------------------------------- Valoración descriptiva (preescolar)
+
+
+@personal
+def valoraciones(request, pk):
+    clase = clase_para(request.user, pk)
+    periodos, periodo = _periodo(request, clase)
+    if periodo is None:
+        return redirect("mis_clases")
+    matriculas = _matriculas(clase.grupo)
+    actuales = {v.matricula_id: v for v in ValoracionDescriptiva.objects.filter(clase=clase, periodo=periodo)}
+    if request.method == "POST":
+        if periodo.cerrado:
+            raise PermissionDenied("El periodo está cerrado.")
+        with transaction.atomic():
+            for m in matriculas:
+                texto = request.POST.get(f"v_{m.id}", "").strip()
+                if texto:
+                    ValoracionDescriptiva.objects.update_or_create(matricula=m, clase=clase, periodo=periodo, defaults={"texto": texto})
+                elif m.id in actuales:
+                    actuales[m.id].delete()
+        messages.success(request, "Valoraciones guardadas.")
+        return redirect(f"{request.path}?periodo={periodo.pk}")
+    filas = [{"matricula": m, "texto": actuales[m.id].texto if m.id in actuales else ""} for m in matriculas]
+    return render(request, "docente/valoraciones.html", {
+        "clase": clase, "periodos": periodos, "periodo": periodo, "filas": filas, "seccion": "notas",
+    })
+
+
+def plan_de(clase):
+    """El renglón del plan de estudios de esta clase, para enlazar sus logros."""
+    return PlanEstudio.objects.filter(grado=clase.grupo.grado, asignatura=clase.asignatura).first()

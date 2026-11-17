@@ -1,8 +1,9 @@
 <li><div class="lista__fila"><div>
-  <div class="lista__titulo">{{ t.titulo }}</div>
+  <div class="lista__titulo"><a href="{% url 'familia_tarea' est.pk t.pk %}" style="color:inherit">{{ t.titulo }}</a></div>
   <div class="lista__meta">{{ t.clase.asignatura }}, {{ t.clase.docente.nombre_completo }}</div></div>
   <div class="lista__lado">
-  {% if t.situacion == "pendiente" %}<span class="estado {% if t.dias <= 1 %}estado--aviso{% else %}estado--info{% endif %}">{% if t.dias == 0 %}Se entrega hoy{% elif t.dias == 1 %}Se entrega mañana{% else %}Faltan {{ t.dias }} días{% endif %}</span>
+  {% if t.situacion == "pendiente" and t.entrega_en_linea %}<a class="boton boton--chico" href="{% url 'familia_tarea' est.pk t.pk %}" style="margin-bottom:4px">Enviar tarea</a><br>{% endif %}{% if t.situacion == "pendiente" %}<span class="estado {% if t.dias <= 1 %}estado--aviso{% else %}estado--info{% endif %}">{% if t.dias == 0 %}Se entrega hoy{% elif t.dias == 1 %}Se entrega mañana{% else %}Faltan {{ t.dias }} días{% endif %}</span>
+  {% elif t.situacion == "enviada" %}<span class="estado estado--info">Enviada, por revisar</span>
   {% elif t.situacion == "entregada" %}<span class="estado estado--bien">Entregada</span>
   {% elif t.situacion == "tarde" %}<span class="estado estado--aviso">Entregada tarde</span>
   {% elif t.situacion == "no_entregada" %}<span class="estado estado--mal">No entregada</span>

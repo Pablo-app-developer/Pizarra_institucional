@@ -1,0 +1,3 @@
+<form class="filtros" method="get"><div class="campo"><label for="f-grado">Grado</label>
+<select id="f-grado" name="grado" data-autoenviar>{% for g in grados %}<option value="{{ g.pk }}"{% if g == grado %} selected{% endif %}>{{ g.nombre }}</option>{% endfor %}</select></div>
+<noscript><button class="boton boton--secundario">Ver</button></noscript></form>

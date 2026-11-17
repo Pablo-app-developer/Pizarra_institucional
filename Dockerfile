@@ -14,4 +14,4 @@ COPY . .
 RUN DEBUG=0 SECRET_KEY=solo-para-construir python manage.py collectstatic --noinput
 
 # Con CARGAR_DEMO=1 se crea el colegio de ejemplo en el primer arranque (si ya existe, no hace nada).
-CMD ["sh", "-c", "python manage.py migrate --noinput && if [ \"$CARGAR_DEMO\" = \"1\" ]; then python manage.py datos_demo || true; fi && gunicorn config.wsgi --bind 0.0.0.0:${PORT:-8000} --workers 1 --threads 4 --timeout 120"]
+CMD ["sh", "-c", "python manage.py migrate --noinput && if [ \"$CARGAR_DEMO\" = \"1\" ]; then python manage.py datos_demo --actualizar || true; fi && gunicorn config.wsgi --bind 0.0.0.0:${PORT:-8000} --workers 1 --threads 4 --timeout 120"]

@@ -1,0 +1,10 @@
+{% extends "registration/_fuera.html" %}
+{% block titulo %}Nueva contraseña{% endblock %}
+{% block contenido %}
+{% if validlink %}<h1>Cree su contraseña nueva</h1>
+<form method="post" novalidate style="margin-top:16px">{% csrf_token %}{% include "base/_form.html" %}
+<button class="boton" type="submit">Guardar contraseña</button></form>
+{% else %}<h1>Este enlace ya no sirve</h1>
+<p style="margin:8px 0 16px">Puede que haya vencido o que ya lo haya usado.</p>
+<a class="boton" href="{% url 'password_reset' %}">Pedir un enlace nuevo</a>{% endif %}
+{% endblock %}

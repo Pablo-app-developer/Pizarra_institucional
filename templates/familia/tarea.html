@@ -1,0 +1,22 @@
+{% extends "familia/_base.html" %}
+{% block familia %}
+<p class="miga"><a href="{% url 'familia_tareas' est.pk %}">Tareas</a> /</p>
+<div class="rejilla rejilla--2">
+<section class="panel"><div class="panel__cabeza"><div><h2>{{ t.titulo }}</h2><p class="pequeno secundario">{{ t.clase.asignatura }}, {{ t.clase.docente.nombre_completo }}</p></div>
+{% if entrega.estado == "entregada" %}<span class="estado estado--bien">Entregada</span>{% elif entrega.estado == "tarde" %}<span class="estado estado--aviso">Entregada tarde</span>{% elif entrega.estado == "no_entregada" %}<span class="estado estado--mal">No entregada</span>{% elif entrega.estado == "enviada" %}<span class="estado estado--info">Enviada, por revisar</span>{% elif tarde %}<span class="estado">Por revisar</span>{% else %}<span class="estado estado--info">Por entregar</span>{% endif %}</div>
+<div class="panel__cuerpo"><dl class="definiciones"><dt>Asignada</dt><dd>{{ t.fecha_asignacion|date:"l j \d\e F"|lower|capfirst }}</dd><dt>Se entrega</dt><dd><strong>{{ t.fecha_entrega|date:"l j \d\e F"|lower|capfirst }}</strong></dd></dl>
+{% if t.descripcion %}<p style="margin-top:14px;max-width:70ch;white-space:pre-line">{{ t.descripcion }}</p>{% endif %}
+{% if t.enlace %}<p style="margin-top:10px"><a href="{{ t.enlace }}" target="_blank" rel="noopener noreferrer">Abrir material de apoyo</a></p>{% endif %}
+{% if entrega.comentario %}<p class="aviso aviso--info" style="margin:14px 0 0"><strong>Comentario del docente:</strong> {{ entrega.comentario }}</p>{% endif %}
+{% if not t.entrega_en_linea %}<p class="campo__ayuda" style="margin-top:14px">Esta tarea se entrega en clase. El docente registra aquí si fue entregada.</p>{% endif %}</div></section>
+{% if t.entrega_en_linea %}<section class="panel"><div class="panel__cabeza"><h2>{% if entrega.enviada %}Lo que se envió{% else %}Enviar la tarea{% endif %}</h2></div><div class="panel__cuerpo">
+{% if entrega.enviada %}<p class="pequeno secundario">Enviada el {{ entrega.enviada|date:"j \d\e F, g:i a"|lower }}.</p>
+{% if entrega.archivo %}<p style="margin:6px 0"><a href="{% url 'archivo_entrega' entrega.pk %}">Descargar el archivo enviado</a></p>{% endif %}
+{% if not form %}{% if entrega.respuesta %}<p style="white-space:pre-line;margin-top:8px">{{ entrega.respuesta }}</p>{% endif %}{% if entrega.enlace %}<p style="margin-top:8px"><a href="{{ entrega.enlace }}" target="_blank" rel="noopener noreferrer">Abrir el enlace enviado</a></p>{% endif %}{% endif %}{% endif %}
+{% if form %}{% if tarde and not entrega.enviada %}<p class="aviso">La fecha de entrega ya pasó. Puede enviarla, y el docente decidirá si la recibe como entrega tardía.</p>{% endif %}
+<form method="post" enctype="multipart/form-data" novalidate style="margin-top:10px">{% csrf_token %}{% include "base/_form.html" %}
+<button class="boton" type="submit">{% if entrega.enviada %}Corregir el envío{% else %}Enviar tarea{% endif %}</button></form>
+{% elif entrega and entrega.estado != "enviada" %}<p class="campo__ayuda" style="margin-top:10px">El docente ya revisó esta tarea; no se puede volver a enviar.</p>{% endif %}
+</div></section>{% endif %}
+</div>
+{% endblock %}

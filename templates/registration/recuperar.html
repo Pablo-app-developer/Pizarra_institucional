@@ -1,0 +1,12 @@
+{% extends "registration/_fuera.html" %}
+{% block contenido %}
+<h1>Recuperar contraseña</h1>
+{% if correo_activo %}
+<p class="secundario" style="margin:6px 0 18px">Escriba el correo que tiene registrado en el colegio. Le enviaremos un enlace para crear una contraseña nueva.</p>
+<form method="post" novalidate>{% csrf_token %}{% include "base/_form.html" %}
+<button class="boton" type="submit">Enviar enlace</button></form>
+<p class="campo__ayuda" style="margin-top:14px">Si no tiene correo registrado, pida una contraseña nueva en la secretaría del colegio.</p>
+{% else %}
+<p style="margin-top:8px">Este colegio aún no tiene activado el envío de correos. Pida una contraseña nueva en la secretaría.</p>
+{% endif %}
+{% endblock %}

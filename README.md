@@ -12,17 +12,13 @@ python -m venv .venv
 .venv\Scripts\activate          # Windows  (en Linux/Mac: source .venv/bin/activate)
 pip install -r requirements.txt
 python manage.py migrate
-python manage.py datos_demo     # colegio de ejemplo con 48 estudiantes
+python manage.py datos_demo     # colegio de ejemplo con 58 estudiantes
 python manage.py runserver
 ```
 
 Abra http://127.0.0.1:8000. Contraseña de las cuentas de ejemplo: `pizarra2026`
 
-| Rol | Usuario |
-|---|---|
-| Rectoría | 1001 |
-| Docente (Matemáticas, director de 6°A) | 2001 |
-| Acudiente con dos hijos | 3001 |
+Los usuarios de cada perfil están en la tabla de más abajo.
 
 En Windows, los boletines en PDF necesitan GTK/Pango para WeasyPrint
 (ver https://doc.courtbouillon.org/weasyprint/stable/first_steps.html). Con Docker no hace falta instalar nada:
@@ -31,27 +27,30 @@ En Windows, los boletines en PDF necesitan GTK/Pango para WeasyPrint
 docker build -t pizarra . && docker run -p 8000:8000 -e DEBUG=1 pizarra
 ```
 
-## Qué hace cada rol
+## Qué hace cada perfil
 
-**Directivos**: panel del colegio, estudiantes (uno a uno o por Excel), docentes, acudientes, grupos y clases,
-consolidado de notas con puestos, boletines en PDF por estudiante o por grupo, comunicados, escala de valoración,
-cierre de periodos.
+| Perfil | Usuario de ejemplo | Acceso |
+|---|---|---|
+| Rectoría | 1001 | Todo, incluida la identidad del colegio (escudo y color), la escala y el equipo directivo |
+| Coordinación | 1002 | Lo académico: docentes, grupos, plan de estudios, horarios, consolidados, boletines, cierre de periodos y de año |
+| Secretaría | 1003 | Estudiantes, acudientes, matrícula, importación, boletines, comunicados y pensiones |
+| Docente | 2001 | Notas, recuperaciones, tareas, asistencia, observador, logros de sus asignaturas y su horario |
+| Docente de preescolar | 2007 | Lo mismo, con valoración descriptiva por dimensiones en lugar de notas |
+| Acudiente | 3001 | Notas, tareas (y su envío), horario, asistencia, observaciones, boletines, pagos y avisos de sus hijos |
+| Estudiante | (opcional) | Lo mismo que el acudiente, sin el estado de cuenta |
+| Administrador de la plataforma | superusuario | `/superadmin/`: crea colegios y sus primeras cuentas |
 
-**Docentes**: planilla de notas tipo hoja de cálculo con actividades y pesos, tareas con registro de entregas,
-asistencia por clase, observador del estudiante, y observaciones de boletín si dirigen grupo.
+## Módulos
 
-**Acudientes y estudiantes**: resumen con alertas, notas por actividad, tareas pendientes y entregadas,
-asistencia, observaciones y boletines de los periodos cerrados. Un acudiente con varios hijos los ve a todos.
-
-## Reglas que conviene conocer
-
-- El usuario de ingreso es el número de documento. Las cuentas nuevas reciben una contraseña temporal
-  que se muestra una sola vez y debe cambiarse en el primer ingreso.
-- Definitiva de una asignatura: promedio ponderado por el peso de cada actividad. Si todas pesan 0, promedio simple.
-  Mientras falten actividades por calificar, se calcula sobre lo ya calificado.
-- Nota final del año: promedio de los periodos según su peso.
-- Cerrar un periodo bloquea los cambios de notas y publica el boletín a las familias. Se puede reabrir.
-- Cada colegio solo ve su información; un mismo servidor atiende varios colegios.
+- **Identidad:** escudo y color institucional en el menú, la pantalla de ingreso, los boletines y los recibos.
+- **Plan de estudios y malla:** asignaturas e intensidad por grado, logros por periodo, malla imprimible. Los logros salen en el boletín.
+- **Horarios:** jornada con bloques y descansos, generación automática sin cruces de docentes y edición por grupo con validación.
+- **Notas:** planilla por actividades con pesos, recuperaciones con tope configurable, consolidado con puestos.
+- **Preescolar:** grados con valoración descriptiva; el informe muestra textos en lugar de notas.
+- **Tareas:** con registro de entregas o con envío por la plataforma (respuesta, enlace o archivo).
+- **Avisos:** nota baja, falta, tarea sin entregar, tarea nueva, comunicado y pago. Quedan en la plataforma y, con correo configurado, llegan también por correo.
+- **Pensiones:** cobro masivo por grado, pagos parciales, recibos, cartera y recordatorio a quienes están en mora.
+- **Cierre de año:** propuesta de promoción editable y creación del año siguiente con grupos, clases y matrículas.
 
 ## Dar de alta un colegio real
 
@@ -77,17 +76,33 @@ Sirve para demostraciones; para un colegio en operación use el plan de pago (un
 
 Variables de entorno: `SECRET_KEY` (obligatoria en producción), `DEBUG=0`, `DATABASE_URL`, `ALLOWED_HOSTS`.
 
+### Correo (recuperar contraseña y avisos)
+
+Sin estas variables la plataforma funciona, pero no envía correos: los avisos quedan solo en la plataforma
+y las contraseñas las restablece el colegio.
+
+`EMAIL_HOST`, `EMAIL_PORT` (587), `EMAIL_HOST_USER`, `EMAIL_HOST_PASSWORD`, `EMAIL_USE_TLS` (1), `DEFAULT_FROM_EMAIL`.
+
+### Archivos de las tareas
+
+Los archivos que suben los estudiantes se guardan en la carpeta `media/` del servidor. En el plan gratuito de
+Render ese disco se borra en cada despliegue o reinicio: para un colegio en operación use un disco persistente
+o un almacenamiento externo. El escudo no tiene ese problema porque se guarda en la base de datos.
+
 ## Pruebas
 
 ```bash
 python manage.py test
 ```
 
-34 pruebas: cálculo de notas, permisos por rol y por colegio, planilla, importación y apertura de todas las pantallas.
+79 pruebas: cálculo de notas y recuperaciones, permisos por perfil y por colegio, planilla, importación, horarios sin cruces,
+cierre de año, avisos, envío de tareas, pensiones, preescolar, escudo y apertura de todas las pantallas.
 
 ## Lo que todavía no incluye
 
-- Recuperar contraseña por correo (hoy la restablece el colegio) y avisos por correo o WhatsApp.
-- Entrega de tareas con archivos por parte del estudiante: el docente registra quién entregó.
-- Recuperaciones o nivelaciones, logros descriptivos por asignatura y promoción de año automática.
-- Horarios, pagos de pensión y matrícula en línea.
+- Avisos por WhatsApp automáticos (requieren un proveedor de WhatsApp Business, que tiene costo). Hoy el docente
+  tiene un enlace para abrir el chat con el acudiente.
+- Pagos en línea: las pensiones registran lo que el colegio recibe; no hay pasarela ni facturación electrónica.
+- Almacenamiento externo para los archivos de tareas.
+- Restricciones avanzadas en el generador de horarios (docentes de medio tiempo, salones especiales, bloques dobles).
+- Promoción con comisiones de evaluación por actas; hoy la decisión se registra estudiante por estudiante.

@@ -1,0 +1,12 @@
+{% extends "base/base.html" %}
+{% block titulo %}Estado de cuenta de {{ est.nombre_natural }}{% endblock %}
+{% block contenido %}
+<div class="encabezado"><div><p class="miga"><a href="{% url 'cartera' %}">Pensiones</a> /</p><h1>Estado de cuenta de {{ est.nombre_natural }}</h1>
+<p class="encabezado__sub">{% if matricula %}{{ matricula.grupo.nombre_largo }}{% else %}Sin matrícula este año{% endif %}{% if total.vencido %}. Saldo vencido: $ {{ total.vencido|floatformat:"0g" }}{% endif %}</p></div></div>
+<div class="rejilla rejilla--2">
+<section class="panel"><div class="panel__cabeza"><h2>Cobros y pagos</h2></div>{% include "pensiones/_cobros.html" with administra=True vacio="Este estudiante no tiene cobros este año." %}</section>
+<form method="post" class="panel" novalidate><div class="panel__cabeza"><h2>Agregar otro cobro</h2></div><div class="panel__cuerpo">
+{% csrf_token %}{% include "base/_form.html" %}<button class="boton" type="submit">Agregar cobro</button>
+<p class="campo__ayuda" style="margin-top:10px">Para matrículas, uniformes, salidas u otros valores que no son la pensión mensual.</p></div></form>
+</div>
+{% endblock %}

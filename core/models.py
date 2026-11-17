@@ -2,7 +2,7 @@ from decimal import Decimal
 
 from django.contrib.auth.models import AbstractUser
 from django.core.exceptions import ValidationError
-from django.core.validators import MaxValueValidator, MinValueValidator
+from django.core.validators import MaxValueValidator, MinValueValidator, RegexValidator
 from django.db import models
 from django.utils import timezone
 
@@ -31,6 +31,26 @@ class Colegio(models.Model):
     )
     desde_alto = models.DecimalField("Alto desde", max_digits=3, decimal_places=1, default=Decimal("4.0"))
     desde_superior = models.DecimalField("Superior desde", max_digits=3, decimal_places=1, default=Decimal("4.6"))
+    tope_recuperacion = models.DecimalField(
+        "nota máxima por recuperación", max_digits=3, decimal_places=1, null=True, blank=True,
+        default=Decimal("3.0"),
+        help_text="Quien recupera queda, como máximo, con esta nota en el periodo. Vacío: sin tope.",
+    )
+    perdidas_para_reprobar = models.PositiveSmallIntegerField(
+        "asignaturas perdidas para reprobar el año", default=3,
+        help_text="Con este número de asignaturas perdidas al final, el sistema propone reprobar.",
+    )
+    version_demo = models.PositiveSmallIntegerField(default=0, editable=False)
+
+    # Identidad: el escudo se guarda en la base de datos para que no dependa del disco del servidor.
+    escudo = models.BinaryField(null=True, blank=True, editable=False)
+    escudo_tipo = models.CharField(max_length=20, blank=True, editable=False)
+    escudo_version = models.PositiveIntegerField(default=0, editable=False)
+    color = models.CharField(
+        "color institucional", max_length=7, blank=True,
+        validators=[RegexValidator(r"^#[0-9a-fA-F]{6}$", "Use un color en formato #RRGGBB.")],
+        help_text="Se usa en el menú, los botones y los informes. Vacío: verde Pizarra. Elija un tono oscuro para que el texto blanco se lea.",
+    )
 
     class Meta:
         verbose_name = "colegio"
@@ -62,6 +82,15 @@ class Colegio(models.Model):
     def anio_activo(self):
         return self.anios.filter(activo=True).first()
 
+    @property
+    def escudo_data_uri(self):
+        """El escudo incrustado, para el PDF."""
+        if not self.escudo:
+            return ""
+        import base64
+
+        return f"data:{self.escudo_tipo};base64,{base64.b64encode(bytes(self.escudo)).decode()}"
+
 
 class Usuario(AbstractUser):
     class Rol(models.TextChoices):
@@ -74,6 +103,19 @@ class Usuario(AbstractUser):
     rol = models.CharField(max_length=12, choices=Rol.choices, default=Rol.ACUDIENTE)
     documento = models.CharField(max_length=30, blank=True)
     telefono = models.CharField("teléfono", max_length=40, blank=True)
+    class Cargo(models.TextChoices):
+        RECTOR = "rector", "Rectoría"
+        COORDINADOR = "coordinador", "Coordinación"
+        SECRETARIA = "secretaria", "Secretaría"
+
+    cargo = models.CharField(
+        max_length=12, choices=Cargo.choices, blank=True,
+        help_text="Solo para directivos. Define a qué secciones tiene acceso.",
+    )
+    recibir_correos = models.BooleanField(
+        "recibir avisos por correo", default=True,
+        help_text="Notas bajas, faltas, tareas sin entregar y comunicados.",
+    )
     debe_cambiar_clave = models.BooleanField(
         default=False, help_text="Pide una contraseña nueva en el próximo ingreso."
     )
@@ -100,6 +142,24 @@ class Usuario(AbstractUser):
     @property
     def es_familia(self):
         return self.rol in (self.Rol.ACUDIENTE, self.Rol.ESTUDIANTE)
+
+    # Qué puede hacer cada cargo directivo. Un directivo sin cargo se trata como rectoría.
+    CAPACIDADES = {
+        "rector": {"estudiantes", "academico", "boletines", "comunicados", "pensiones", "configuracion"},
+        "coordinador": {"estudiantes", "academico", "boletines", "comunicados"},
+        "secretaria": {"estudiantes", "boletines", "comunicados", "pensiones"},
+    }
+
+    def puede(self, capacidad):
+        if not self.es_directivo:
+            return False
+        return capacidad in self.CAPACIDADES.get(self.cargo or "rector", set())
+
+    @property
+    def etiqueta_rol(self):
+        if self.es_directivo and self.cargo:
+            return self.get_cargo_display()
+        return self.get_rol_display()
 
 
 class AnioLectivo(models.Model):
@@ -154,7 +214,17 @@ class Grado(models.Model):
     colegio = models.ForeignKey(Colegio, on_delete=models.CASCADE, related_name="grados")
     nombre = models.CharField(max_length=40, help_text="Por ejemplo: Sexto")
     abreviatura = models.CharField(max_length=6, help_text="Por ejemplo: 6°")
-    orden = models.PositiveSmallIntegerField(default=0, help_text="Define el orden en las listas.")
+    orden = models.PositiveSmallIntegerField(
+        default=0, help_text="Define el orden en las listas y a qué grado se promueve (el siguiente en orden)."
+    )
+    descriptivo = models.BooleanField(
+        "valoración descriptiva (preescolar)", default=False,
+        help_text="En lugar de notas, los docentes escriben una valoración por dimensión.",
+    )
+    pension = models.DecimalField(
+        "pensión mensual", max_digits=10, decimal_places=0, default=0,
+        help_text="Valor que se cobra cada mes a los estudiantes de este grado.",
+    )
 
     class Meta:
         verbose_name = "grado"
@@ -205,7 +275,8 @@ class Clase(models.Model):
     grupo = models.ForeignKey(Grupo, on_delete=models.CASCADE, related_name="clases")
     asignatura = models.ForeignKey(Asignatura, on_delete=models.PROTECT, related_name="clases")
     docente = models.ForeignKey(
-        Usuario, on_delete=models.PROTECT, related_name="clases", limit_choices_to={"rol": "docente"}
+        Usuario, on_delete=models.PROTECT, related_name="clases", limit_choices_to={"rol": "docente"},
+        null=True, blank=True, help_text="Puede asignarlo después.",
     )
     horas_semanales = models.PositiveSmallIntegerField(default=4)
 
@@ -291,8 +362,14 @@ class Acudiencia(models.Model):
 class Matricula(models.Model):
     estudiante = models.ForeignKey(Estudiante, on_delete=models.CASCADE, related_name="matriculas")
     grupo = models.ForeignKey(Grupo, on_delete=models.PROTECT, related_name="matriculas")
+    class Resultado(models.TextChoices):
+        PROMOVIDO = "promovido", "Promovido"
+        REPROBADO = "reprobado", "Reprobado"
+        GRADUADO = "graduado", "Graduado"
+
     activa = models.BooleanField(default=True, help_text="Desmarque si el estudiante se retiró del grupo.")
     fecha = models.DateField(default=timezone.localdate)
+    resultado = models.CharField("resultado del año", max_length=10, choices=Resultado.choices, blank=True)
 
     class Meta:
         verbose_name = "matrícula"
@@ -360,6 +437,14 @@ class Nota(models.Model):
         return f"{self.valor}"
 
 
+def ruta_entrega(instancia, nombre):
+    # Nombre impredecible: el archivo solo se sirve por una vista que verifica permisos.
+    import uuid
+    from pathlib import PurePath
+
+    return f"entregas/{instancia.tarea_id}/{uuid.uuid4().hex}{PurePath(nombre).suffix.lower()[:8]}"
+
+
 class Tarea(models.Model):
     clase = models.ForeignKey(Clase, on_delete=models.CASCADE, related_name="tareas")
     titulo = models.CharField("título", max_length=140)
@@ -367,6 +452,10 @@ class Tarea(models.Model):
     fecha_asignacion = models.DateField("asignada el", default=timezone.localdate)
     fecha_entrega = models.DateField("se entrega el")
     enlace = models.URLField("enlace de apoyo", blank=True, help_text="Guía, video o documento (opcional).")
+    entrega_en_linea = models.BooleanField(
+        "recibir la entrega por la plataforma", default=False,
+        help_text="El estudiante podrá escribir su respuesta, pegar un enlace o subir un archivo.",
+    )
 
     class Meta:
         verbose_name = "tarea"
@@ -386,6 +475,7 @@ class Tarea(models.Model):
 
 class Entrega(models.Model):
     class Estado(models.TextChoices):
+        ENVIADA = "enviada", "Enviada, por revisar"
         ENTREGADA = "entregada", "Entregada"
         TARDE = "tarde", "Entregada tarde"
         NO_ENTREGADA = "no_entregada", "No entregada"
@@ -394,6 +484,11 @@ class Entrega(models.Model):
     matricula = models.ForeignKey(Matricula, on_delete=models.CASCADE, related_name="entregas")
     estado = models.CharField(max_length=14, choices=Estado.choices)
     comentario = models.CharField(max_length=240, blank=True)
+    # Lo que envía el estudiante cuando la tarea se recibe por la plataforma.
+    respuesta = models.TextField(blank=True)
+    enlace = models.URLField(blank=True)
+    archivo = models.FileField(upload_to=ruta_entrega, blank=True)
+    enviada = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         verbose_name = "entrega"
@@ -474,3 +569,165 @@ class Comunicado(models.Model):
 
     def __str__(self):
         return self.titulo
+
+
+# ---------------------------------------------------------------- Plan de estudios
+
+
+class PlanEstudio(models.Model):
+    """Qué asignaturas se ven en un grado y con qué intensidad horaria."""
+
+    grado = models.ForeignKey(Grado, on_delete=models.CASCADE, related_name="plan")
+    asignatura = models.ForeignKey(Asignatura, on_delete=models.CASCADE, related_name="planes")
+    horas_semanales = models.PositiveSmallIntegerField(default=4)
+
+    class Meta:
+        verbose_name = "asignatura del plan"
+        ordering = ["grado__orden", "asignatura__area", "asignatura__nombre"]
+        constraints = [models.UniqueConstraint(fields=["grado", "asignatura"], name="plan_unico")]
+
+    def __str__(self):
+        return f"{self.asignatura} en {self.grado}"
+
+
+class Logro(models.Model):
+    """Desempeño esperado de una asignatura en un grado y periodo. Sale en la malla y en el boletín."""
+
+    grado = models.ForeignKey(Grado, on_delete=models.CASCADE, related_name="logros")
+    asignatura = models.ForeignKey(Asignatura, on_delete=models.CASCADE, related_name="logros")
+    periodo_numero = models.PositiveSmallIntegerField("periodo", default=1)
+    texto = models.TextField("logro o desempeño")
+
+    class Meta:
+        verbose_name = "logro"
+        ordering = ["grado__orden", "asignatura__nombre", "periodo_numero", "id"]
+
+    def __str__(self):
+        return self.texto[:60]
+
+
+# ------------------------------------------------------------------------ Horarios
+
+
+class Bloque(models.Model):
+    """Franja de la jornada: una hora de clase o un descanso."""
+
+    colegio = models.ForeignKey(Colegio, on_delete=models.CASCADE, related_name="bloques")
+    nombre = models.CharField(max_length=30, help_text="Por ejemplo: 1ª hora o Descanso")
+    inicio = models.TimeField()
+    fin = models.TimeField()
+    descanso = models.BooleanField(default=False, help_text="En los descansos no se programan clases.")
+
+    class Meta:
+        verbose_name = "bloque de la jornada"
+        verbose_name_plural = "bloques de la jornada"
+        ordering = ["inicio"]
+
+    def __str__(self):
+        return f"{self.nombre} ({self.inicio:%H:%M} a {self.fin:%H:%M})"
+
+    def clean(self):
+        if self.inicio and self.fin and self.fin <= self.inicio:
+            raise ValidationError("La hora final debe ser posterior a la inicial.")
+
+
+DIAS = [(1, "Lunes"), (2, "Martes"), (3, "Miércoles"), (4, "Jueves"), (5, "Viernes")]
+
+
+class HorarioClase(models.Model):
+    grupo = models.ForeignKey(Grupo, on_delete=models.CASCADE, related_name="horario")
+    dia = models.PositiveSmallIntegerField(choices=DIAS)
+    bloque = models.ForeignKey(Bloque, on_delete=models.CASCADE, related_name="horario")
+    clase = models.ForeignKey(Clase, on_delete=models.CASCADE, related_name="horario")
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["grupo", "dia", "bloque"], name="horario_unico_por_grupo")]
+
+
+# ------------------------------------------------------------------ Recuperaciones
+
+
+class Recuperacion(models.Model):
+    """Nota de recuperación de una asignatura en un periodo."""
+
+    matricula = models.ForeignKey(Matricula, on_delete=models.CASCADE, related_name="recuperaciones")
+    clase = models.ForeignKey(Clase, on_delete=models.CASCADE, related_name="recuperaciones")
+    periodo = models.ForeignKey(Periodo, on_delete=models.CASCADE, related_name="recuperaciones")
+    valor = models.DecimalField(max_digits=3, decimal_places=1)
+    fecha = models.DateField(default=timezone.localdate)
+
+    class Meta:
+        verbose_name = "recuperación"
+        constraints = [
+            models.UniqueConstraint(fields=["matricula", "clase", "periodo"], name="recuperacion_unica")
+        ]
+
+
+class ValoracionDescriptiva(models.Model):
+    """Valoración cualitativa por dimensión, para grados de preescolar."""
+
+    matricula = models.ForeignKey(Matricula, on_delete=models.CASCADE, related_name="valoraciones")
+    clase = models.ForeignKey(Clase, on_delete=models.CASCADE, related_name="valoraciones")
+    periodo = models.ForeignKey(Periodo, on_delete=models.CASCADE, related_name="valoraciones")
+    texto = models.TextField()
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["matricula", "clase", "periodo"], name="valoracion_unica")
+        ]
+
+
+# -------------------------------------------------------------------------- Avisos
+
+
+class Aviso(models.Model):
+    usuario = models.ForeignKey(Usuario, on_delete=models.CASCADE, related_name="avisos")
+    texto = models.CharField(max_length=300)
+    url = models.CharField(max_length=200, blank=True)
+    leido = models.BooleanField(default=False)
+    creado = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        ordering = ["-creado"]
+        indexes = [models.Index(fields=["usuario", "leido"])]
+
+
+# ----------------------------------------------------------------------- Pensiones
+
+
+class Cobro(models.Model):
+    estudiante = models.ForeignKey(Estudiante, on_delete=models.CASCADE, related_name="cobros")
+    anio = models.ForeignKey(AnioLectivo, on_delete=models.CASCADE, related_name="cobros")
+    concepto = models.CharField(max_length=80, help_text="Por ejemplo: Pensión de marzo")
+    valor = models.DecimalField(max_digits=10, decimal_places=0, validators=[MinValueValidator(1)])
+    vence = models.DateField("fecha de vencimiento")
+
+    class Meta:
+        verbose_name = "cobro"
+        ordering = ["vence", "id"]
+        constraints = [
+            models.UniqueConstraint(fields=["estudiante", "anio", "concepto"], name="cobro_unico_por_concepto")
+        ]
+
+    def __str__(self):
+        return self.concepto
+
+
+class Pago(models.Model):
+    class Medio(models.TextChoices):
+        TRANSFERENCIA = "transferencia", "Transferencia"
+        EFECTIVO = "efectivo", "Efectivo"
+        CONSIGNACION = "consignacion", "Consignación"
+        DATAFONO = "datafono", "Datáfono"
+        OTRO = "otro", "Otro"
+
+    cobro = models.ForeignKey(Cobro, on_delete=models.CASCADE, related_name="pagos")
+    valor = models.DecimalField(max_digits=10, decimal_places=0, validators=[MinValueValidator(1)])
+    fecha = models.DateField(default=timezone.localdate)
+    medio = models.CharField(max_length=14, choices=Medio.choices, default=Medio.TRANSFERENCIA)
+    referencia = models.CharField("referencia o comprobante", max_length=60, blank=True)
+    registrado_por = models.ForeignKey(Usuario, on_delete=models.SET_NULL, null=True, related_name="pagos_registrados")
+
+    class Meta:
+        verbose_name = "pago"
+        ordering = ["fecha", "id"]

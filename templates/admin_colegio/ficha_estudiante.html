@@ -5,7 +5,7 @@
   <div><p class="miga"><a href="{% url 'gestion_lista' 'estudiantes' %}">Estudiantes</a> /</p>
   <div class="persona"><span class="avatar">{{ est.iniciales }}</span><div><h1>{{ est.nombre_natural }}</h1>
   <p class="encabezado__sub">{{ est.get_tipo_documento_display }} {{ est.documento }}{% if matricula %}, {{ matricula.grupo.nombre_largo }}{% else %}, sin matrícula este año{% endif %}{% if not est.activo %} <span class="estado estado--mal">Retirado</span>{% endif %}</p></div></div></div>
-  <div class="encabezado__acciones">{% if matricula %}<a class="boton boton--secundario" href="{% url 'observador' matricula.pk %}">Observador</a>{% endif %}
+  <div class="encabezado__acciones">{% if "pensiones" in capacidades %}<a class="boton boton--secundario" href="{% url 'cuenta_estudiante' est.pk %}">Estado de cuenta</a>{% endif %}{% if matricula and "academico" in capacidades %}<a class="boton boton--secundario" href="{% url 'observador' matricula.pk %}">Observador</a>{% endif %}
   <a class="boton" href="{% url 'gestion_editar' 'estudiantes' est.pk %}">Editar datos y grupo</a></div>
 </div>
 <div class="rejilla rejilla--2">
@@ -13,7 +13,7 @@
     {% if matricula %}<section class="panel"><div class="panel__cabeza"><h2>Notas del año</h2>
       {% if asistencia.total %}<span class="secundario pequeno">Asistencia {{ asistencia.porcentaje }} %</span>{% endif %}</div>
       {% include "base/_resumen_notas.html" %}</section>
-    <section class="panel"><div class="panel__cabeza"><h2>Observador</h2><a href="{% url 'observador' matricula.pk %}">Agregar observación</a></div>
+    <section class="panel"><div class="panel__cabeza"><h2>Observador</h2>{% if "academico" in capacidades %}<a href="{% url 'observador' matricula.pk %}">Agregar observación</a>{% endif %}</div>
       {% include "base/_observaciones.html" %}</section>
     {% else %}<div class="panel vacio"><p>Este estudiante no está matriculado en el año activo.</p><p><a class="boton" href="{% url 'gestion_editar' 'estudiantes' est.pk %}">Asignar grupo</a></p></div>{% endif %}
   </div>

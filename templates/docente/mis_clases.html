@@ -9,7 +9,7 @@
     <p class="pequeno">{% if c.asistencia_hoy %}<span class="estado estado--bien">Asistencia de hoy tomada</span>{% else %}<span class="estado">Asistencia de hoy sin tomar</span>{% endif %}
     {% if c.tareas_abiertas %} <span class="estado estado--info">{{ c.tareas_abiertas }} tarea{{ c.tareas_abiertas|pluralize }} en curso</span>{% endif %}</p>
     <div class="clase__enlaces">
-      <a class="boton boton--chico" href="{% url 'clase_notas' c.pk %}">Notas</a>
+      <a class="boton boton--chico" href="{% url 'clase_notas' c.pk %}">{% if c.grupo.grado.descriptivo %}Valoraciones{% else %}Notas{% endif %}</a>
       <a class="boton boton--secundario boton--chico" href="{% url 'clase_asistencia' c.pk %}">Asistencia</a>
       <a class="boton boton--secundario boton--chico" href="{% url 'clase_tareas' c.pk %}">Tareas</a>
     </div>

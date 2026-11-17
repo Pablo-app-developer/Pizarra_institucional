@@ -1,0 +1,20 @@
+{% extends "base/base.html" %}
+{% block titulo %}Horario de {{ grupo }}{% endblock %}
+{% block contenido %}
+<div class="encabezado"><div><p class="miga no-imprimir"><a href="{% url 'horarios' %}">Horarios</a> /</p><h1>Horario de {{ grupo.nombre_largo }}</h1></div>
+<div class="encabezado__acciones"><button class="boton boton--secundario" type="button" onclick="window.print()">Imprimir</button></div></div>
+{% if errores %}<div class="mensaje mensaje--error" role="alert"><strong>No se guardó: hay cruces de docentes.</strong><ul style="margin:6px 0 0;padding-left:20px">{% for e in errores %}<li>{{ e }}</li>{% endfor %}</ul></div>{% endif %}
+{% if not filas %}<div class="panel vacio"><p>Defina primero la <a href="{% url 'gestion_lista' 'bloques' %}">jornada escolar</a>.</p></div>{% else %}
+<form method="post">{% csrf_token %}
+<div class="tabla-envoltura"><table class="horario"><thead><tr><th class="hora">Hora</th>{% for n, dia in dias %}<th>{{ dia }}</th>{% endfor %}</tr></thead>
+<tbody>{% for f in filas %}<tr><th scope="row" class="hora">{{ f.bloque.nombre }}<small>{{ f.bloque.inicio|time:"g:i" }} a {{ f.bloque.fin|time:"g:i a" }}</small></th>
+{% if f.bloque.descanso %}<td class="descanso" colspan="5">Descanso</td>{% else %}{% for c in f.celdas %}<td><select name="{{ c.nombre }}" aria-label="{{ f.bloque.nombre }}">
+<option value="">Libre</option>{% for clase in clases %}<option value="{{ clase.pk }}"{% if c.valor == clase.pk %} selected{% endif %}>{{ clase.asignatura }}</option>{% endfor %}</select></td>{% endfor %}{% endif %}</tr>{% endfor %}</tbody></table></div>
+<div class="barra-guardar no-imprimir"><span class="pequeno secundario">Al guardar se verifica que ningún docente quede con dos grupos a la misma hora.</span><button class="boton" type="submit">Guardar horario</button></div>
+</form>
+<section class="panel no-imprimir" style="margin-top:20px"><div class="panel__cabeza"><h2>Horas por asignatura</h2></div>
+<div class="tabla-envoltura"><table><thead><tr><th>Asignatura</th><th>Docente</th><th class="num">Del plan</th><th class="num">Programadas</th><th></th></tr></thead>
+<tbody>{% for r in resumen %}<tr><th scope="row">{{ r.clase.asignatura }}</th><td>{{ r.clase.docente.nombre_completo|default:"Sin docente" }}</td><td class="num">{{ r.clase.horas_semanales }}</td><td class="num">{{ r.programadas }}</td>
+<td>{% if r.programadas == r.clase.horas_semanales %}<span class="estado estado--bien">Completa</span>{% elif r.programadas < r.clase.horas_semanales %}<span class="estado estado--aviso">Faltan horas</span>{% else %}<span class="estado estado--mal">Sobran horas</span>{% endif %}</td></tr>{% endfor %}</tbody></table></div></section>
+{% endif %}
+{% endblock %}

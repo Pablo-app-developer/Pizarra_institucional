@@ -1,0 +1,4 @@
+{% if hay %}<div class="tabla-envoltura"><table class="horario"><thead><tr><th class="hora">Hora</th>{% for n, dia in dias %}<th>{{ dia }}</th>{% endfor %}</tr></thead>
+<tbody>{% for f in filas %}<tr><th scope="row" class="hora">{{ f.bloque.nombre }}<small>{{ f.bloque.inicio|time:"g:i" }} a {{ f.bloque.fin|time:"g:i a" }}</small></th>
+{% if f.bloque.descanso %}<td class="descanso" colspan="5">Descanso</td>{% else %}{% for h in f.celdas %}{% if h %}<td><strong>{{ h.clase.asignatura }}</strong><small>{% if modo == "docente" %}{{ h.grupo }}{% else %}{{ h.clase.docente.nombre_completo }}{% endif %}</small></td>{% else %}<td class="libre">—</td>{% endif %}{% endfor %}{% endif %}</tr>{% endfor %}</tbody></table></div>
+{% else %}<div class="panel vacio"><p>El colegio aún no ha publicado el horario.</p></div>{% endif %}

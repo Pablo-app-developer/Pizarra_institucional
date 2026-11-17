@@ -1,0 +1,25 @@
+{% extends "base/base.html" %}
+{% block titulo %}Plan de estudios{% endblock %}
+{% block contenido %}
+<div class="encabezado"><div><h1>Plan de estudios</h1><p class="encabezado__sub">Asignaturas e intensidad horaria de cada grado, con sus logros por periodo.</p></div>
+{% if grado %}<div class="encabezado__acciones"><a class="boton boton--secundario" href="{% url 'malla' grado.pk %}">Ver malla curricular</a></div>{% endif %}</div>
+{% if not grado %}<div class="panel vacio"><p>Primero registre los grados en <a href="{% url 'configuracion' %}">Configuración</a>.</p></div>{% else %}
+{% include "academico/_grados.html" %}
+<div class="rejilla rejilla--2">
+  <section class="panel"><div class="panel__cabeza"><h2>{{ grado.nombre }}</h2><span class="secundario pequeno">{{ total_horas }} horas semanales</span></div>
+  <div class="tabla-envoltura">{% if filas %}<table>
+    <thead><tr><th>Asignatura</th><th>Área</th><th class="num">Horas</th><th>Logros</th><th></th></tr></thead>
+    <tbody>{% for f in filas %}<tr><th scope="row"><strong>{{ f.item.asignatura }}</strong></th><td>{{ f.item.asignatura.area|default:"—" }}</td><td class="num">{{ f.item.horas_semanales }}</td>
+    <td><a href="{% url 'logros' f.item.pk %}">{% if f.logros %}{{ f.logros }} registrado{{ f.logros|pluralize }}{% else %}Agregar{% endif %}</a></td>
+    <td class="num"><form method="post" action="{% url 'plan_quitar' f.item.pk %}" data-confirmar="¿Retirar {{ f.item.asignatura }} del plan de {{ grado }}?">{% csrf_token %}<button class="enlace-boton enlace-boton--peligro">Quitar</button></form></td></tr>{% endfor %}</tbody>
+  </table>{% else %}<div class="vacio"><p>Este grado aún no tiene asignaturas en su plan. Agréguelas con el formulario.</p></div>{% endif %}</div>
+  {% if filas and grupos %}<div class="panel__cuerpo" style="border-top:1px solid var(--linea-suave)">
+    <form method="post" action="{% url 'plan_aplicar' grado.pk %}">{% csrf_token %}<button class="boton boton--secundario" type="submit">Crear en los grupos las clases que falten</button></form>
+    <p class="campo__ayuda">Revisa {% for g in grupos %}{{ g }}{% if not forloop.last %}, {% endif %}{% endfor %} y crea, sin docente, las clases del plan que aún no existan.</p></div>{% endif %}
+  </section>
+  <form method="post" class="panel" novalidate><div class="panel__cabeza"><h2>Agregar asignatura</h2></div><div class="panel__cuerpo">
+    {% csrf_token %}<input type="hidden" name="grado" value="{{ grado.pk }}">{% include "base/_form.html" %}
+    <button class="boton" type="submit">Agregar al plan</button>
+    <p class="campo__ayuda" style="margin-top:10px">¿No aparece? Créela en <a href="{% url 'gestion_lista' 'asignaturas' %}">Asignaturas</a>.</p></div></form>
+</div>{% endif %}
+{% endblock %}

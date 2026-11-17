@@ -1,0 +1,15 @@
+{% extends "base/base.html" %}
+{% block titulo %}Logros de {{ item.asignatura }}{% endblock %}
+{% block contenido %}
+<div class="encabezado"><div><p class="miga">{% if user.es_directivo %}<a href="{% url 'plan' %}?grado={{ item.grado.pk }}">Plan de estudios</a>{% else %}<a href="{% url 'mis_clases' %}">Mis clases</a>{% endif %} /</p>
+<h1>Logros de {{ item.asignatura }}, {{ item.grado.nombre }}</h1><p class="encabezado__sub">Aparecen en la malla curricular y en el boletín del periodo correspondiente.</p></div>
+<div class="encabezado__acciones"><a class="boton boton--secundario" href="{% url 'malla' item.grado.pk %}">Ver malla</a></div></div>
+<div class="rejilla rejilla--2">
+  <div class="apilado">{% for numero, lista in por_periodo %}<section class="panel"><div class="panel__cabeza"><h2>Periodo {{ numero }}</h2></div>
+    <ul class="lista">{% for l in lista %}<li><div class="lista__fila"><span style="max-width:62ch">{{ l.texto }}</span>
+    <form method="post" data-confirmar="¿Eliminar este logro?">{% csrf_token %}<button class="enlace-boton enlace-boton--peligro" name="eliminar" value="{{ l.pk }}">Eliminar</button></form></div></li>{% endfor %}</ul></section>
+  {% empty %}<div class="panel vacio"><p>Aún no hay logros. Escriba el primero: qué debe saber o saber hacer el estudiante al terminar el periodo.</p></div>{% endfor %}</div>
+  <form method="post" class="panel" novalidate><div class="panel__cabeza"><h2>Nuevo logro</h2></div><div class="panel__cuerpo">
+    {% csrf_token %}{% include "base/_form.html" %}<button class="boton" type="submit">Agregar logro</button></div></form>
+</div>
+{% endblock %}

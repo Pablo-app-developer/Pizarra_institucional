@@ -1,10 +1,18 @@
+from django.contrib.auth import views as auth_views
 from django.urls import path
 
-from .views import comunes, directivo, docente, familia
+from .views import academico, comunes, directivo, docente, familia, pensiones
 
 urlpatterns = [
     path("", comunes.inicio, name="inicio"),
+    path("cuenta/", comunes.mi_cuenta, name="mi_cuenta"),
     path("cuenta/clave/", comunes.cambiar_clave, name="cambiar_clave"),
+    path("avisos/", comunes.avisos, name="avisos"),
+    path("escudo/<int:pk>/", comunes.escudo, name="escudo"),
+    path("entregas/<int:pk>/archivo/", comunes.archivo_entrega, name="archivo_entrega"),
+    path("recuperar/", comunes.RecuperarClave.as_view(), name="password_reset"),
+    path("recuperar/enviado/", auth_views.PasswordResetDoneView.as_view(template_name="registration/recuperar_enviado.html"), name="password_reset_done"),
+    path("recuperar/<uidb64>/<token>/", comunes.NuevaClave.as_view(), name="password_reset_confirm"),
     path("comunicados/", comunes.comunicados, name="comunicados"),
     path("boletin/<int:matricula_id>/<int:periodo_id>/", comunes.boletin_estudiante, name="boletin_estudiante"),
     path("boletines/grupo/<int:grupo_id>/<int:periodo_id>/", comunes.boletines_grupo, name="boletines_grupo"),
@@ -21,6 +29,23 @@ urlpatterns = [
     path("colegio/estudiantes/<int:pk>/", directivo.ficha_estudiante, name="ficha_estudiante"),
     path("colegio/acudiencias/<int:pk>/retirar/", directivo.desvincular_acudiente, name="desvincular_acudiente"),
     path("colegio/usuarios/<int:pk>/clave/", directivo.restablecer_clave, name="restablecer_clave"),
+    path("colegio/plan/", academico.plan, name="plan"),
+    path("colegio/plan/<int:pk>/quitar/", academico.plan_quitar, name="plan_quitar"),
+    path("colegio/plan/aplicar/<int:grado_id>/", academico.plan_aplicar, name="plan_aplicar"),
+    path("colegio/horarios/", academico.horarios, name="horarios"),
+    path("colegio/horarios/generar/", academico.horarios_generar, name="horarios_generar"),
+    path("colegio/horarios/<int:pk>/", academico.horario_grupo, name="horario_grupo"),
+    path("colegio/cierre/", academico.cierre, name="cierre"),
+    path("colegio/pensiones/", pensiones.cartera, name="cartera"),
+    path("colegio/pensiones/generar/", pensiones.generar_cobros, name="generar_cobros"),
+    path("colegio/pensiones/recordar/", pensiones.recordar_mora, name="recordar_mora"),
+    path("colegio/pensiones/estudiante/<int:pk>/", pensiones.cuenta_estudiante, name="cuenta_estudiante"),
+    path("colegio/pensiones/cobro/<int:pk>/pago/", pensiones.registrar_pago, name="registrar_pago"),
+    path("colegio/pensiones/cobro/<int:pk>/eliminar/", pensiones.eliminar_cobro, name="eliminar_cobro"),
+    path("colegio/pensiones/pago/<int:pk>/anular/", pensiones.anular_pago, name="anular_pago"),
+    path("recibo/<int:pk>/", pensiones.recibo, name="recibo"),
+    path("plan/<int:pk>/logros/", academico.logros, name="logros"),
+    path("malla/<int:grado_id>/", academico.malla, name="malla"),
     path("colegio/<slug:entidad>/", directivo.gestion_lista, name="gestion_lista"),
     path("colegio/<slug:entidad>/nuevo/", directivo.gestion_form, name="gestion_nuevo"),
     path("colegio/<slug:entidad>/<int:pk>/editar/", directivo.gestion_form, name="gestion_editar"),
@@ -39,6 +64,9 @@ urlpatterns = [
     path("clases/<int:pk>/tareas/<int:tarea_id>/entregas/", docente.tarea_entregas, name="tarea_entregas"),
     path("clases/<int:pk>/asistencia/", docente.asistencia, name="clase_asistencia"),
     path("clases/<int:pk>/estudiantes/", docente.clase_estudiantes, name="clase_estudiantes"),
+    path("clases/<int:pk>/recuperaciones/", docente.recuperaciones, name="clase_recuperaciones"),
+    path("clases/<int:pk>/valoraciones/", docente.valoraciones, name="clase_valoraciones"),
+    path("horario/", academico.mi_horario, name="mi_horario"),
     path("observador/<int:matricula_id>/", docente.observador, name="observador"),
     path("direccion/<int:pk>/", docente.direccion_grupo, name="direccion_grupo"),
 
@@ -46,6 +74,9 @@ urlpatterns = [
     path("familia/<int:pk>/", familia.resumen, name="familia_resumen"),
     path("familia/<int:pk>/notas/", familia.notas, name="familia_notas"),
     path("familia/<int:pk>/tareas/", familia.tareas, name="familia_tareas"),
+    path("familia/<int:pk>/tareas/<int:tarea_id>/", familia.tarea, name="familia_tarea"),
+    path("familia/<int:pk>/horario/", academico.familia_horario, name="familia_horario"),
+    path("familia/<int:pk>/pagos/", pensiones.familia_pagos, name="familia_pagos"),
     path("familia/<int:pk>/asistencia/", familia.asistencia, name="familia_asistencia"),
     path("familia/<int:pk>/observaciones/", familia.observaciones, name="familia_observaciones"),
     path("familia/<int:pk>/boletines/", familia.boletines, name="familia_boletines"),

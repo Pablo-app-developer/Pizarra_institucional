@@ -5,8 +5,8 @@ from django import forms
 from django.core.exceptions import ValidationError
 
 from .models import (
-    Actividad, Acudiencia, AnioLectivo, Asignatura, Clase, Colegio, Comunicado, Estudiante,
-    Grado, Grupo, Matricula, Observacion, Periodo, Tarea, Usuario,
+    Actividad, Acudiencia, AnioLectivo, Asignatura, Bloque, Clase, Cobro, Colegio, Comunicado, Estudiante,
+    Grado, Grupo, Logro, Matricula, Observacion, Pago, Periodo, PlanEstudio, Tarea, Usuario,
 )
 
 # Sin caracteres que se confunden al dictarlos o copiarlos a mano (0/O, 1/l).
@@ -54,14 +54,80 @@ class FormularioColegio(forms.ModelForm):
         return obj
 
 
+FORMATOS_ESCUDO = {"PNG", "JPEG", "WEBP"}
+
+
+def procesar_escudo(archivo):
+    """Valida la imagen y la devuelve como PNG de máximo 400 px.
+
+    Se vuelve a codificar siempre: así se descartan metadatos y cualquier contenido
+    que no sea la imagen misma. No se aceptan SVG.
+    """
+    from io import BytesIO
+
+    from PIL import Image, UnidentifiedImageError
+
+    if archivo.size > 2 * 1024 * 1024:
+        raise ValidationError("El escudo supera los 2 MB. Use una imagen más liviana.")
+    try:
+        imagen = Image.open(archivo)
+        if imagen.format not in FORMATOS_ESCUDO:
+            raise ValidationError("Use una imagen PNG, JPG o WebP.")
+        imagen.load()
+    except (UnidentifiedImageError, OSError, Image.DecompressionBombError):
+        raise ValidationError("No se pudo leer la imagen. Use un archivo PNG, JPG o WebP.")
+    imagen = imagen.convert("RGBA")
+    imagen.thumbnail((400, 400))
+    salida = BytesIO()
+    imagen.save(salida, format="PNG", optimize=True)
+    return salida.getvalue()
+
+
 class ColegioForm(forms.ModelForm):
+    imagen_escudo = forms.FileField(
+        label="Escudo del colegio", required=False,
+        help_text="PNG, JPG o WebP, preferiblemente con fondo transparente. Sale en el menú, el ingreso y los informes.",
+    )
+    quitar_escudo = forms.BooleanField(label="Quitar el escudo actual", required=False)
+
     class Meta:
         model = Colegio
         fields = [
-            "nombre", "lema", "nit", "codigo_dane", "resolucion", "nombre_rector", "ciudad",
+            "nombre", "lema", "color", "nit", "codigo_dane", "resolucion", "nombre_rector", "ciudad",
             "direccion", "telefono", "correo", "nota_minima", "desde_basico", "desde_alto",
-            "desde_superior", "nota_maxima",
+            "desde_superior", "nota_maxima", "tope_recuperacion", "perdidas_para_reprobar",
         ]
+        widgets = {"color": forms.TextInput(attrs={"type": "color"})}
+
+    field_order = ["nombre", "lema", "imagen_escudo", "quitar_escudo", "color"]
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if not self.instance.escudo:
+            del self.fields["quitar_escudo"]
+        if not self.instance.color:
+            self.initial["color"] = "#14523f"
+
+    def clean_imagen_escudo(self):
+        archivo = self.cleaned_data.get("imagen_escudo")
+        return procesar_escudo(archivo) if archivo else None
+
+    def clean_color(self):
+        color = self.cleaned_data.get("color", "").lower()
+        return "" if color == "#14523f" else color
+
+    def save(self, commit=True):
+        colegio = super().save(commit=False)
+        nuevo = self.cleaned_data.get("imagen_escudo")
+        if nuevo:
+            colegio.escudo, colegio.escudo_tipo = nuevo, "image/png"
+            colegio.escudo_version += 1
+        elif self.cleaned_data.get("quitar_escudo"):
+            colegio.escudo, colegio.escudo_tipo = None, ""
+            colegio.escudo_version += 1
+        if commit:
+            colegio.save()
+        return colegio
 
 
 class AnioForm(FormularioColegio):
@@ -80,7 +146,7 @@ class PeriodoForm(FormularioColegio):
 class GradoForm(FormularioColegio):
     class Meta:
         model = Grado
-        fields = ["nombre", "abreviatura", "orden"]
+        fields = ["nombre", "abreviatura", "orden", "descriptivo", "pension"]
 
 
 class GrupoForm(FormularioColegio):
@@ -208,6 +274,117 @@ class AcudienteForm(PersonaForm):
     rol = "acudiente"
 
 
+class DirectivoForm(PersonaForm):
+    rol = "directivo"
+
+    class Meta(PersonaForm.Meta):
+        fields = ["first_name", "last_name", "documento", "cargo", "email", "telefono", "is_active"]
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["cargo"].required = True
+        self.fields["cargo"].help_text = (
+            "Rectoría: todo. Coordinación: lo académico. Secretaría: estudiantes, boletines y pensiones."
+        )
+
+
+class MiCuentaForm(forms.ModelForm):
+    class Meta:
+        model = Usuario
+        fields = ["email", "telefono", "recibir_correos"]
+        labels = {"email": "Correo"}
+        help_texts = {"email": "Sirve para recuperar la contraseña y recibir avisos del colegio."}
+
+
+class BloqueForm(FormularioColegio):
+    class Meta:
+        model = Bloque
+        fields = ["nombre", "inicio", "fin", "descanso"]
+        widgets = {"inicio": forms.TimeInput(attrs={"type": "time"}, format="%H:%M"),
+                   "fin": forms.TimeInput(attrs={"type": "time"}, format="%H:%M")}
+
+
+class PlanForm(forms.ModelForm):
+    class Meta:
+        model = PlanEstudio
+        fields = ["asignatura", "horas_semanales"]
+
+    def __init__(self, *args, grado=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.grado = grado
+        self.fields["asignatura"].queryset = Asignatura.objects.filter(colegio=grado.colegio).exclude(
+            planes__grado=grado
+        )
+
+
+class LogroForm(forms.ModelForm):
+    class Meta:
+        model = Logro
+        fields = ["periodo_numero", "texto"]
+        widgets = {"texto": forms.Textarea(attrs={"rows": 3})}
+
+
+class CobroForm(forms.ModelForm):
+    class Meta:
+        model = Cobro
+        fields = ["concepto", "valor", "vence"]
+        widgets = {"vence": forms.DateInput(attrs={"type": "date"}, format="%Y-%m-%d")}
+
+
+class GenerarCobrosForm(forms.Form):
+    concepto = forms.CharField(max_length=80, help_text="Por ejemplo: Pensión de marzo")
+    vence = forms.DateField(label="Fecha de vencimiento", widget=forms.DateInput(attrs={"type": "date"}))
+
+
+class PagoForm(forms.ModelForm):
+    class Meta:
+        model = Pago
+        fields = ["valor", "fecha", "medio", "referencia"]
+        widgets = {"fecha": forms.DateInput(attrs={"type": "date"}, format="%Y-%m-%d")}
+
+    def __init__(self, *args, saldo=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.saldo = saldo
+        if saldo is not None and not self.is_bound:
+            self.fields["valor"].initial = saldo
+
+    def clean_valor(self):
+        valor = self.cleaned_data["valor"]
+        if self.saldo is not None and valor > self.saldo:
+            raise ValidationError(f"El pago supera el saldo pendiente de este cobro ($ {self.saldo:,.0f}).".replace(",", "."))
+        return valor
+
+
+EXTENSIONES_ENTREGA = {".pdf", ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx", ".jpg", ".jpeg", ".png", ".txt", ".zip"}
+
+
+class EntregaEnLineaForm(forms.Form):
+    respuesta = forms.CharField(label="Respuesta", widget=forms.Textarea(attrs={"rows": 5}), required=False)
+    enlace = forms.URLField(label="Enlace al trabajo", required=False, help_text="Por ejemplo, un documento de Drive.")
+    archivo = forms.FileField(
+        label="Archivo", required=False,
+        help_text="PDF, Word, Excel, PowerPoint, imagen o ZIP, de máximo 10 MB.",
+    )
+
+    def clean_archivo(self):
+        archivo = self.cleaned_data.get("archivo")
+        if not archivo:
+            return archivo
+        from pathlib import PurePath
+
+        if PurePath(archivo.name).suffix.lower() not in EXTENSIONES_ENTREGA:
+            raise ValidationError("Ese tipo de archivo no se recibe. Use PDF, Word, Excel, PowerPoint, imagen o ZIP.")
+        if archivo.size > 10 * 1024 * 1024:
+            raise ValidationError("El archivo supera los 10 MB.")
+        return archivo
+
+    def clean(self):
+        datos = super().clean()
+        if not self.errors and not any(datos.get(c) for c in ("respuesta", "enlace", "archivo")):
+            raise ValidationError("Escriba la respuesta, pegue un enlace o adjunte un archivo.")
+        return datos
+
+
 class VincularAcudienteForm(forms.Form):
     documento = forms.CharField(label="Documento del acudiente", max_length=30)
     parentesco = forms.ChoiceField(choices=Acudiencia.Parentesco.choices)
@@ -249,7 +426,7 @@ class ActividadForm(forms.ModelForm):
 class TareaForm(forms.ModelForm):
     class Meta:
         model = Tarea
-        fields = ["titulo", "descripcion", "fecha_asignacion", "fecha_entrega", "enlace"]
+        fields = ["titulo", "descripcion", "fecha_asignacion", "fecha_entrega", "enlace", "entrega_en_linea"]
         widgets = {
             "fecha_asignacion": forms.DateInput(attrs={"type": "date"}, format="%Y-%m-%d"),
             "fecha_entrega": forms.DateInput(attrs={"type": "date"}, format="%Y-%m-%d"),

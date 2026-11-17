@@ -1,12 +1,16 @@
 {% extends "docente/_clase.html" %}
 {% block clase %}
 <h2>{{ tarea.titulo }}</h2>
-<p class="secundario" style="margin:2px 0 16px">Se entrega el {{ tarea.fecha_entrega|date:"j \d\e F \d\e Y"|lower }}. Marque solo a quienes ya revisó; los demás quedan pendientes.</p>
+<p class="secundario" style="margin:2px 0 16px">Se entrega el {{ tarea.fecha_entrega|date:"j \d\e F \d\e Y"|lower }}. Marque solo a quienes ya revisó; los demás quedan pendientes.{% if tarea.entrega_en_linea %} Esta tarea se recibe por la plataforma: lo que envió cada estudiante aparece bajo su nombre.{% endif %}</p>
 <form method="post">{% csrf_token %}
 <div class="tabla-envoltura"><table class="personas">
   <thead><tr><th>Estudiante</th><th>Entrega</th><th>Comentario para la familia</th></tr></thead>
   <tbody>{% for f in filas %}<tr>
-    <th scope="row">{{ f.matricula.estudiante }}</th>
+    <th scope="row" style="white-space:normal">{{ f.matricula.estudiante }}
+      {% if f.entrega.enviada %}<div class="lista__meta" style="max-width:38ch">Envió el {{ f.entrega.enviada|date:"j \d\e F, g:i a"|lower }}.
+      {% if f.entrega.respuesta %}<br>{{ f.entrega.respuesta|truncatechars:220 }}{% endif %}
+      {% if f.entrega.enlace %}<br><a href="{{ f.entrega.enlace }}" target="_blank" rel="noopener noreferrer">Abrir enlace</a>{% endif %}
+      {% if f.entrega.archivo %}<br><a href="{% url 'archivo_entrega' f.entrega.pk %}">Descargar archivo</a>{% endif %}</div>{% endif %}</th>
     <td><div class="opciones" role="radiogroup" aria-label="Entrega de {{ f.matricula.estudiante }}">
       <label><input type="radio" name="e_{{ f.matricula.pk }}" value=""{% if not f.entrega %} checked{% endif %}>Pendiente</label>
       {% for valor, etiqueta in estados %}<label class="op-{{ valor }}"><input type="radio" name="e_{{ f.matricula.pk }}" value="{{ valor }}"{% if f.entrega.estado == valor %} checked{% endif %}>{{ etiqueta }}</label>{% endfor %}
