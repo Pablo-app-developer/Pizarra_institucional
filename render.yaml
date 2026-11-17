@@ -1,7 +1,6 @@
-# Despliegue en Render: Nuevo > Blueprint > elegir este repositorio.
-databases:
-  - name: pizarra-db
-    plan: free
+# Despliegue sin costo: servicio web gratuito de Render + base de datos gratuita de Neon.
+# En Render: New > Blueprint > elegir este repositorio. Pedirá el valor de DATABASE_URL:
+# pegue la cadena de conexión que entrega Neon (neon.com), que empieza por postgresql://
 services:
   - type: web
     name: pizarra
@@ -13,6 +12,4 @@ services:
       - key: SECRET_KEY
         generateValue: true
       - key: DATABASE_URL
-        fromDatabase:
-          name: pizarra-db
-          property: connectionString
+        sync: false

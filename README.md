@@ -62,12 +62,18 @@ python manage.py crear_colegio "Colegio San Pedro" --documento 63500111 --nombre
 Luego, ya dentro: Configuración (año, periodos, grados, asignaturas), Docentes, Grupos y clases, y por último
 Estudiantes > Importar desde Excel.
 
-## Publicarla en Render
+## Publicarla sin costo (Render + Neon)
 
-1. Suba este código a un repositorio de GitHub.
-2. En Render: New > Blueprint y elija el repositorio. `render.yaml` crea la base PostgreSQL y el servicio web.
-3. Agregue su dominio en la variable `ALLOWED_HOSTS` si usa uno propio.
-4. En la consola del servicio: `python manage.py crear_colegio ...`
+La base de datos gratuita de Render se borra a los 30 días, así que la base va en Neon, que no vence.
+
+1. En https://neon.com cree un proyecto gratuito y copie la cadena de conexión (empieza por `postgresql://`).
+2. En Render: New > Blueprint y elija este repositorio. Cuando pida `DATABASE_URL`, pegue la cadena de Neon.
+3. Cuando termine el despliegue, abra la pestaña Shell del servicio y ejecute `python manage.py crear_colegio ...`
+   (o `python manage.py datos_demo` para mostrar el colegio de ejemplo).
+4. Si usa dominio propio, agréguelo en la variable `ALLOWED_HOSTS`.
+
+El plan gratuito de Render apaga el servicio tras 15 minutos sin visitas y tarda cerca de un minuto en despertar.
+Sirve para demostraciones; para un colegio en operación use el plan de pago (unos 7 USD al mes).
 
 Variables de entorno: `SECRET_KEY` (obligatoria en producción), `DEBUG=0`, `DATABASE_URL`, `ALLOWED_HOSTS`.
 
