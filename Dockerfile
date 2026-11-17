@@ -12,4 +12,5 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 RUN DEBUG=1 python manage.py collectstatic --noinput
 
-CMD ["sh", "-c", "python manage.py migrate --noinput && gunicorn config.wsgi --bind 0.0.0.0:${PORT:-8000} --workers 1 --threads 4 --timeout 120"]
+# Con CARGAR_DEMO=1 se crea el colegio de ejemplo en el primer arranque (si ya existe, no hace nada).
+CMD ["sh", "-c", "python manage.py migrate --noinput && if [ \"$CARGAR_DEMO\" = \"1\" ]; then python manage.py datos_demo || true; fi && gunicorn config.wsgi --bind 0.0.0.0:${PORT:-8000} --workers 1 --threads 4 --timeout 120"]

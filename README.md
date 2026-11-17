@@ -68,8 +68,8 @@ La base de datos gratuita de Render se borra a los 30 días, así que la base va
 
 1. En https://neon.com cree un proyecto gratuito y copie la cadena de conexión (empieza por `postgresql://`).
 2. En Render: New > Blueprint y elija este repositorio. Cuando pida `DATABASE_URL`, pegue la cadena de Neon.
-3. Cuando termine el despliegue, abra la pestaña Shell del servicio y ejecute `python manage.py crear_colegio ...`
-   (o `python manage.py datos_demo` para mostrar el colegio de ejemplo).
+3. Con la variable `CARGAR_DEMO=1` el colegio de ejemplo se crea solo en el primer arranque.
+   Para un colegio real, quite esa variable y ejecute `python manage.py crear_colegio ...` desde la consola del servicio.
 4. Si usa dominio propio, agréguelo en la variable `ALLOWED_HOSTS`.
 
 El plan gratuito de Render apaga el servicio tras 15 minutos sin visitas y tarda cerca de un minuto en despertar.
